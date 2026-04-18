@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(xargs grep *)",
+      "Bash(wsl --status)",
+      "Bash(wsl -e bash -c \"docker --version\")",
+      "Bash(wsl *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(*)",
+      "Bash(echo \"Pull PID: $!\")"
     ]
   }
 }
