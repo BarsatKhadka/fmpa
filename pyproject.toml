@@ -33,6 +33,7 @@ dependencies = [
     "matplotlib>=3.5.0",
     "tqdm>=4.65.0",
     "absl-py>=1.0.0",
+    "scipy>=1.10.1",
 ]
 
 [project.optional-dependencies]
@@ -71,3 +72,19 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v"
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128" },
+]
+torchvision = [
+  { index = "pytorch-cu128" },
+]
+torchaudio = [
+  { index = "pytorch-cu128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
