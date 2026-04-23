@@ -238,7 +238,8 @@ def _print_summary_table(results):
     print()
     print(f"Total runtime: {total_runtime:.2f}s")
     if total_overlaps > 0:
-        print(f"⚠  DISQUALIFIED: {total_overlaps} total overlaps across benchmarks")
+        # Avoid non-ASCII glyphs to keep Windows consoles with cp1252 happy.
+        print(f"DISQUALIFIED: {total_overlaps} total overlaps across benchmarks")
     print()
 
 
