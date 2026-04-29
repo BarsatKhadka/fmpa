@@ -1,0 +1,30 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm14... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm14\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 49, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm14/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 49, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+Traceback (most recent call last):
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 338, in <module>
+    main()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 393, in place
+    _wl, _de, _co, _ov = cheap_components(_pg)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 112, in cheap_components
+    wl   = self._hpwl_vec(ap, safe_nnp, nnmask) / hpwl_norm
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 4463, in _hpwl_vec
+    all_x=ap[safe_nnp,0]; all_y=ap[safe_nnp,1]
+numpy._core._exceptions.MemoryError: Unable to allocate 3.91 MiB for an array with shape (32008, 16) and data type float64

@@ -1,0 +1,25 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm16... fatal   : Memory allocation failure
+#[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm16\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 48
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm16/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 48
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[CPLACE] wl=0.1037 den=1.0000 cong=5.8036 ov=0.0000 proxy=3.5055 t=3.6s
+[SCALE] s=1.05 wl=0.0812 den=1.0024 cong=4.5434 ov=4.1966 proxy=842.1825
+[SCALE] s=1.10 wl=0.0817 den=1.0023 cong=4.3462 ov=3.5207 proxy=706.8887
+[SCALE] s=1.15 wl=0.0824 den=1.0049 cong=4.2807 ov=6.7738 proxy=1357.4932
+[SCALE] s=1.20 wl=0.0828 den=1.0179 cong=4.1849 ov=19.2905 proxy=3860.7821
+[SCALE] s=1.30 wl=0.0839 den=1.0516 cong=4.0896 ov=43.5309 proxy=8708.8353
+[DIAG] pre-SA oracle: proxy=1.4911  den=0.822  cong=2.062
+proxy=1.4910  (wl=0.049 den=0.823 cong=2.061)  VALID  [3276.32s]

@@ -3872,7 +3872,7 @@ class Placer:
 
         # Build base position tensors (macros + ports). When pos_starts is set,
         # each seed gets its own base; chain k pulls from seeds[k % S].
-        if pos_starts is None or len(pos_starts) <= 1:
+        if pos_starts is None or len(pos_starts) <= 1: 
             seeds = [pos]
         else:
             seeds = list(pos_starts)
