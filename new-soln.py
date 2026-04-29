@@ -373,6 +373,59 @@ class Placer:
         _plog(f"legacy_valid={int(legacy_valid)}")
         self._trace(f"legacy_valid={int(legacy_valid)} oracle_fast={int(oracle_fast)}")
         boost_seed_hard: Optional[np.ndarray] = None
+        if not small_budget and self._time_left(t0) >= 80:
+            pair_hard = self._legalize_hard(data.init_hard, data)
+        else:
+            pair_hard = self._fast_legalize_hard(data.init_hard, data, sweeps=5)
+        pair_hard = self._tiny_fix_hard(
+            pair_hard,
+            data,
+            rounds=120 if data.num_hard <= 320 else 80,
+        )
+        pair_hard = self._fast_legalize_hard(pair_hard, data, sweeps=3)
+        pair_hard_fast = pair_hard.copy().astype(np.float32, copy=False)
+        if data.num_hard > 520 and not self._placement_is_valid(pair_hard, base_soft, benchmark, data) and self._time_left(t0) >= 18:
+            try:
+                pair_gp = self._grid_pack_legalize_hard(pair_hard, data)
+                pair_gp = self._fast_legalize_hard(pair_gp, data, sweeps=5)
+                if self._placement_is_valid(pair_gp, base_soft, benchmark, data):
+                    candidates.append(
+                        (
+                            pair_gp.astype(np.float32),
+                            base_soft.copy(),
+                            "pair-gridpack",
+                            self._cheap_score(pair_gp.astype(np.float32), base_soft, data),
+                        )
+                    )
+            except Exception:
+                pass
+        if not small_budget and self._time_left(t0) >= 28:
+            shelf_hard = self._tiny_fix_hard(self._shelf_legalize_hard(data.init_hard, data), data)
+        else:
+            shelf_hard = pair_hard.copy()
+        shelf_hard = self._tiny_fix_hard(
+            shelf_hard,
+            data,
+            rounds=120 if data.num_hard <= 320 else 80,
+        )
+        shelf_hard = self._fast_legalize_hard(shelf_hard, data, sweeps=3)
+        shelf_hard_fast = shelf_hard.copy().astype(np.float32, copy=False)
+        if data.num_hard > 520:
+            # Keep a "fast/structure-preserving" seed for latent modes even if we later grid-pack for legality.
+            shelf_hard_fast = pair_hard_fast.copy().astype(np.float32, copy=False)
+        pair_candidate = (pair_hard, base_soft.copy(), "pair-base", self._cheap_score(pair_hard, base_soft, data))
+        shelf_candidate = (
+            shelf_hard,
+            base_soft.copy(),
+            "shelf-base",
+            self._cheap_score(shelf_hard, base_soft, data),
+        )
+        candidates.append(pair_candidate)
+        same_pair_shelf = bool(
+            np.allclose(pair_candidate[0], shelf_candidate[0], atol=1e-4, rtol=0.0)
+        )
+        if not same_pair_shelf:
+            candidates.append(shelf_candidate)
 
         # Benchmark-calibrated surrogate weighting (at most one exact call).
         # This improves cheap-score ranking when WL/density/congestion scales differ a lot.
@@ -419,7 +472,6 @@ class Placer:
             and self._time_left(t0) >= (select_reserve + 26)
         ):
             try:
-                periphery_candidates: List[Tuple[np.ndarray, float]] = []
                 periph_inputs = [(0.60, 0.75)]
                 cong_hint = None
                 if self._surrogate_calib is not None or plc is not None:
@@ -449,33 +501,6 @@ class Placer:
                             self._cheap_score(evac.astype(np.float32), base_soft, data),
                         )
                     )
-                    periphery_candidates.append((evac.astype(np.float32), float(self._cheap_score(evac.astype(np.float32), base_soft, data))))
-                if (
-                    plc is not None
-                    and legacy_valid
-                    and periphery_candidates
-                    and getattr(self, "_oracle_call_sec", None) is not None
-                    and float(getattr(self, "_oracle_call_sec", 99.0) or 99.0) <= 8.5
-                    and self._time_left(t0) >= (select_reserve + 18)
-                ):
-                    best_exact_h = None
-                    best_exact_proxy = float("inf")
-                    best_exact_cheap = float("inf")
-                    for cand_h, cand_cheap in periphery_candidates[:2]:
-                        exact = self._proxy_cost_if_valid(cand_h, base_soft, benchmark, plc, data)
-                        if math.isfinite(exact) and float(exact) < best_exact_proxy:
-                            best_exact_proxy = float(exact)
-                            best_exact_h = cand_h.copy()
-                            best_exact_cheap = float(cand_cheap)
-                    if best_exact_h is not None:
-                        candidates.append(
-                            (
-                                best_exact_h.astype(np.float32),
-                                base_soft.copy(),
-                                "periphery-exact-best",
-                                float(best_exact_cheap - 1e-3),
-                            )
-                        )
                 _plog("periphery_candidates_done")
                 _tlog("periphery_candidates_done")
             except Exception:
@@ -510,6 +535,8 @@ class Placer:
                 seeds = [legacy_hard_fast]
                 if init_gap_seed is not None:
                     seeds.append(init_gap_seed)
+                seeds.append(pair_hard_fast.copy())
+                seeds.append(shelf_hard_fast.copy())
                 pop = self._gpu_population_eplace(
                     data,
                     t0,
@@ -596,41 +623,6 @@ class Placer:
                     _tlog("oracle_sa_early_done")
             except Exception:
                 pass
-        if not small_budget and self._time_left(t0) >= 80:
-            pair_hard = self._legalize_hard(data.init_hard, data)
-        else:
-            pair_hard = self._fast_legalize_hard(data.init_hard, data, sweeps=5)
-        pair_hard_fast = pair_hard.copy().astype(np.float32, copy=False)
-        if data.num_hard > 520 and not self._placement_is_valid(pair_hard, base_soft, benchmark, data) and self._time_left(t0) >= 18:
-            try:
-                pair_gp = self._grid_pack_legalize_hard(pair_hard, data)
-                pair_gp = self._fast_legalize_hard(pair_gp, data, sweeps=5)
-                if self._placement_is_valid(pair_gp, base_soft, benchmark, data):
-                    candidates.append(
-                        (
-                            pair_gp.astype(np.float32),
-                            base_soft.copy(),
-                            "pair-gridpack",
-                            self._cheap_score(pair_gp.astype(np.float32), base_soft, data),
-                        )
-                    )
-            except Exception:
-                pass
-        if not small_budget and self._time_left(t0) >= 28:
-            shelf_hard = self._tiny_fix_hard(self._shelf_legalize_hard(data.init_hard, data), data)
-        else:
-            shelf_hard = pair_hard.copy()
-        shelf_hard_fast = shelf_hard.copy().astype(np.float32, copy=False)
-        if data.num_hard > 520:
-            # Keep a "fast/structure-preserving" seed for latent modes even if we later grid-pack for legality.
-            shelf_hard_fast = pair_hard_fast.copy().astype(np.float32, copy=False)
-        pair_candidate = (pair_hard, base_soft.copy(), "pair-base", self._cheap_score(pair_hard, base_soft, data))
-        shelf_candidate = (
-            shelf_hard,
-            base_soft.copy(),
-            "shelf-base",
-            self._cheap_score(shelf_hard, base_soft, data),
-        )
         extra_hard_seeds: List[np.ndarray] = [
             legacy_hard_fast.copy(),
             pair_hard_fast.copy(),
@@ -640,11 +632,6 @@ class Placer:
         ]
         if boost_seed_hard is not None:
             extra_hard_seeds.append(boost_seed_hard)
-        if legacy_valid:
-            candidates.append(pair_candidate if pair_candidate[3] <= shelf_candidate[3] else shelf_candidate)
-        else:
-            candidates.append(pair_candidate)
-            candidates.append(shelf_candidate)
 
         # Topology sweep (short budgets): quick GPU gradient "worlds" with different density weights.
         # Goal: generate structurally different seeds before analytical/global refinement.
@@ -1031,6 +1018,7 @@ class Placer:
                 t0,
                 soft_seed=base_soft.copy(),
                 k=6 if (TIME_BUDGET >= 1800 and data.num_hard <= 420) else (4 if data.num_hard <= 350 else 3),
+                seed_hards=[legacy_hard_fast.copy(), pair_hard_fast.copy(), shelf_hard_fast.copy()],
                 iters_scale=float(scale),
             )
             _tlog(f"gpu_pop_out={len(pop)}")
@@ -1049,8 +1037,12 @@ class Placer:
             plc is not None
             and self._device.type == "cuda"
             and TIME_BUDGET >= 300
-            and data.num_hard >= 360
-            and self._time_left(t0) >= (select_reserve + (26 if small_budget else 34))
+            and data.num_hard >= 420
+            and (
+                getattr(self, "_oracle_call_sec", None) is None
+                or float(getattr(self, "_oracle_call_sec", 99.0) or 99.0) <= 6.0
+            )
+            and self._time_left(t0) >= (select_reserve + (34 if small_budget else 48))
         ):
             # Use the best *currently valid* seed as the base for OT so the target geometry is sensible.
             ot_seed_h = legacy_hard
@@ -1082,7 +1074,8 @@ class Placer:
                 reserve = float(min(60.0, max(20.0, 0.12 * float(TIME_BUDGET))))
                 eff_left = float(max(0.0, self._time_left(t0) - reserve))
                 can_calls = eff_left / max(est, 0.8)
-                if est <= 25.0 and can_calls >= 18.0:
+                slow_long_budget = bool(TIME_BUDGET >= 600 and est > 5.0)
+                if (not slow_long_budget) and est <= 25.0 and can_calls >= 18.0:
                     sa = self._oracle_sa_multistart(
                         candidates,
                         benchmark,
@@ -1146,6 +1139,10 @@ class Placer:
             and legacy_valid
             and TIME_BUDGET >= 300
             and data.num_hard <= 380
+            and (
+                getattr(self, "_oracle_call_sec", None) is None
+                or float(getattr(self, "_oracle_call_sec", 99.0) or 99.0) <= 4.0
+            )
             and self._time_left(t0) >= (select_reserve + (45 if small_budget else 75))
         ):
             start_h, start_s, start_name, _ = min(candidates, key=lambda c: float(c[3]))
@@ -1170,8 +1167,14 @@ class Placer:
         # Run it early (before expensive heuristic refinements) while we still have budget.
         if (
             plc is not None
-            and EXACT_PARALLEL
-            and oracle_fast
+            and (
+                EXACT_PARALLEL
+                or (
+                    data.num_hard <= 220
+                    and getattr(self, "_oracle_call_sec", None) is not None
+                    and float(getattr(self, "_oracle_call_sec", 99.0) or 99.0) <= 8.0
+                )
+            )
             and data.num_hard <= 320
             and self._time_left(t0) >= (select_reserve + (55 if TIME_BUDGET <= 240 else 120))
         ):
@@ -1573,6 +1576,11 @@ class Placer:
             and TIME_BUDGET >= 300
             and data.num_hard <= 600
             and not did_exact_parallel
+            and (
+                getattr(self, "_oracle_call_sec", None) is None
+                or data.num_hard <= 320
+                or float(getattr(self, "_oracle_call_sec", 99.0) or 99.0) <= 6.0
+            )
             and self._time_left_for_work() >= (
                 36 if data.num_hard <= 350 else 44 if data.num_hard <= 650 else 52
             )
@@ -1688,7 +1696,8 @@ class Placer:
                 # Decide by how many exact evaluations we can actually afford, not by a fixed latency.
                 eff_left = float(max(0.0, self._time_left(t0) - reserve))
                 can_calls = eff_left / max(est, 0.8)
-                est_ok = (est <= 25.0) and (can_calls >= 30.0) and (self._time_left(t0) >= 120.0)
+                slow_long_budget = bool(TIME_BUDGET >= 600 and est > 5.0)
+                est_ok = (not slow_long_budget) and (est <= 25.0) and (can_calls >= 30.0) and (self._time_left(t0) >= 120.0)
                 # Calls cap scales with budget and oracle speed.
                 calls_cap = int(min(3000, max(80, can_calls)))
                 need_left = 200 if calls_cap >= 600 else 160 if calls_cap >= 240 else 120
@@ -1770,6 +1779,28 @@ class Placer:
 
         best_hard, best_soft = self._select_best(candidates, benchmark, plc, data)
         self._trace("select_best_done")
+
+        if plc is not None:
+            try:
+                est_polish = float(getattr(self, "_oracle_call_sec", 1.5) or 1.5)
+                min_left = max(10.0, 3.0 * est_polish + 3.0)
+                if self._time_left(t0) >= min_left:
+                    polish_calls = 10 if est_polish <= 2.5 else 6 if est_polish <= 5.5 else 4
+                    polished = self._oracle_micro_polish(
+                        best_hard,
+                        best_soft,
+                        benchmark,
+                        plc,
+                        data,
+                        t0,
+                        label="final-micro-polish",
+                        max_calls=int(polish_calls),
+                    )
+                    if polished is not None:
+                        best_hard, best_soft = polished[0], polished[1]
+                        self._trace("final_micro_polish_done")
+            except Exception:
+                pass
 
         # Final safety: enforce legality before returning (some legalization paths can leave
         # tiny but non-zero overlaps that slip past fast checks).
@@ -4094,6 +4125,46 @@ class Placer:
                 except Exception:
                     pass
 
+            # Micro-cluster recenter: exact local basin search for "already good" placements.
+            # Move a tiny connected cluster only partway toward its net targets, preserving most topology.
+            if self._time_left(t0) > reserve + 1.5 * est + 6:
+                try:
+                    seeds_considered = min(5, int(order.size)) if hasattr(order, "size") else 0
+                    for seed_idx in order[:seeds_considered]:
+                        seed_idx = int(seed_idx)
+                        if not data.movable_hard[seed_idx]:
+                            continue
+                        neigh = data.neighbor_lists[seed_idx]
+                        subset = [seed_idx]
+                        for nb in neigh[:8].tolist():
+                            nb = int(nb)
+                            if data.movable_hard[nb] and nb not in subset:
+                                subset.append(nb)
+                            if len(subset) >= (5 if data.num_hard <= 280 else 6):
+                                break
+                        if len(subset) < 3:
+                            continue
+                        targets = cur_hard.copy().astype(np.float32)
+                        for alpha in (0.22, 0.38):
+                            for idx in subset:
+                                net_t = self._macro_net_target(int(idx), net_centers, data).astype(np.float32)
+                                targets[idx] = (
+                                    (1.0 - float(alpha)) * cur_hard[idx] + float(alpha) * net_t
+                                ).astype(np.float32)
+                            cand_h = self._greedy_reinsert_subset(
+                                cur_hard,
+                                subset=subset,
+                                targets=targets,
+                                data=data,
+                                rng=rng,
+                                max_radius=18,
+                                restarts=2,
+                            )
+                            if cand_h is not None:
+                                proposals.append((cand_h, cur_soft.copy().astype(np.float32), "micro-recenter"))
+                except Exception:
+                    pass
+
             # Cluster exchange: swap two clusters' centroids (large coordinated move).
             if self._time_left(t0) > reserve + 2.0 * est + 8 and frac < 0.65:
                 try:
@@ -4219,6 +4290,32 @@ class Placer:
                 except Exception:
                     pass
 
+            # Periphery evacuation: break congestion floors by moving a diagnosed subset of
+            # poorly-supported central macros to boundary-aligned slots, then let exact oracle decide.
+            if (
+                data.num_hard >= 120
+                and frac < 0.75
+                and self._time_left(t0) > reserve + 1.5 * est + 8
+            ):
+                try:
+                    base_cong = float(base.get("cong", 0.0))
+                    periph_settings = [(0.60, 0.75)]
+                    if base_cong >= 1.35:
+                        periph_settings.append((0.78, 1.05))
+                    for strength, hotspot_weight in periph_settings:
+                        cand_h = self._periphery_evacuate(
+                            cur_hard,
+                            cur_soft,
+                            data,
+                            strength=float(strength),
+                            hotspot_weight=float(hotspot_weight),
+                        )
+                        if cand_h is None:
+                            continue
+                        proposals.append((cand_h, cur_soft.copy().astype(np.float32), f"periphery-{strength:.2f}"))
+                except Exception:
+                    pass
+
             # Gaussian perturbations (small late, larger early).
             sigma_small = float(unit) * float(0.35 + 0.90 * (1.0 - frac))
             sigma_large = float(unit) * float(1.10 + 2.30 * (1.0 - frac))
@@ -4269,7 +4366,23 @@ class Placer:
 
             best_local = None
             best_local_cost = float("inf")
-            to_eval = ranked[: min(10, len(ranked))]
+            reason_best = {}
+            for item in ranked:
+                reason = str(item[3])
+                if reason not in reason_best:
+                    reason_best[reason] = item
+            diverse = sorted(reason_best.values(), key=lambda x: x[0])
+            to_eval = []
+            seen_sig = set()
+            for item in diverse + ranked:
+                reason = str(item[3])
+                sig = (reason, round(float(item[0]), 6))
+                if sig in seen_sig:
+                    continue
+                seen_sig.add(sig)
+                to_eval.append(item)
+                if len(to_eval) >= min(14, len(ranked)):
+                    break
             if calls + len(to_eval) > max_calls:
                 to_eval = to_eval[: max(0, max_calls - calls)]
             if not to_eval:
@@ -4369,6 +4482,8 @@ class Placer:
         if plc is None or not candidates or self._time_left(t0) < 35:
             return None
 
+        from macro_place.utils import validate_placement
+
         # Choose diverse starts: don't trust the surrogate ordering too much.
         # Always consider a few named anchors (initial/gapfix/legacy) plus family diversity.
         pool = sorted(list(candidates), key=lambda c: float(c[3]))
@@ -4383,15 +4498,9 @@ class Placer:
         best_periphery = None
         for cand in pool:
             nm = str(cand[2]) if cand[2] is not None else ""
-            if nm.startswith("periphery-exact"):
+            if nm.startswith("periphery-"):
                 best_periphery = cand
                 break
-        if best_periphery is None:
-            for cand in pool:
-                nm = str(cand[2]) if cand[2] is not None else ""
-                if nm.startswith("periphery-"):
-                    best_periphery = cand
-                    break
         if best_periphery is not None:
             starts.append(best_periphery)
             seen_prefix.add("periphery")
@@ -4412,6 +4521,23 @@ class Placer:
         if not starts:
             return None
 
+        def _is_valid_start(hard: np.ndarray, soft: np.ndarray) -> bool:
+            placement = benchmark.macro_positions.clone()
+            placement[: data.num_hard] = torch.from_numpy(hard).float()
+            if data.num_soft > 0:
+                placement[data.num_hard : data.num_macros] = torch.from_numpy(soft).float()
+            ok, _ = validate_placement(placement, benchmark)
+            return bool(ok)
+
+        valid_starts: List[Tuple[np.ndarray, np.ndarray, str, float]] = []
+        invalid_starts: List[Tuple[np.ndarray, np.ndarray, str, float]] = []
+        for hard, soft, name, cheap in starts:
+            if _is_valid_start(hard, soft):
+                valid_starts.append((hard, soft, name, cheap))
+            else:
+                invalid_starts.append((hard, soft, name, cheap))
+        starts = valid_starts + invalid_starts
+
         est = float(getattr(self, "_oracle_call_sec", 1.5) or 1.5)
         reserve = float(min(60.0, max(20.0, 0.12 * float(TIME_BUDGET))))
         calls_budget = int(
@@ -4421,14 +4547,20 @@ class Placer:
             return None
 
         # Distribute oracle budget across starts, but allow deeper per-start search when oracle is fast.
-        n_starts = int(max(1, min(len(starts), 5 if data.num_hard <= 280 else 4 if data.num_hard <= 320 else 3)))
+        if est > 6.5:
+            start_cap = 4 if (TIME_BUDGET >= 600 and data.num_hard <= 280) else (3 if data.num_hard <= 280 else 2)
+        elif est > 4.5:
+            start_cap = 5 if (TIME_BUDGET >= 600 and data.num_hard <= 280) else (4 if data.num_hard <= 280 else 3)
+        else:
+            start_cap = 5 if data.num_hard <= 280 else 4 if data.num_hard <= 320 else 3
+        n_starts = int(max(1, min(len(starts), int(start_cap))))
         calls_per = int(max(18, min(120, calls_budget // max(n_starts, 1))))
 
         if PROFILE:
             import sys
 
             print(
-                f"[PROFILE] {benchmark.name}: oracle_sa_multistart n_starts={n_starts} calls_per={calls_per} calls_budget={calls_budget}",
+                f"[PROFILE] {benchmark.name}: oracle_sa_multistart n_starts={n_starts} calls_per={calls_per} calls_budget={calls_budget} starts={[str(item[2]) for item in starts[:n_starts]]}",
                 file=sys.stderr,
             )
 
@@ -4470,6 +4602,160 @@ class Placer:
                 best_cost = float(cost)
                 best = (cand_h, cand_s, cand_name, cand_cheap)
         return best
+
+    def _oracle_micro_polish(
+        self,
+        hard: np.ndarray,
+        soft: np.ndarray,
+        benchmark: Benchmark,
+        plc,
+        data: PreparedData,
+        t0: float,
+        label: str,
+        max_calls: Optional[int] = None,
+    ) -> Optional[Tuple[np.ndarray, np.ndarray, str, float]]:
+        if plc is None or self._time_left(t0) < 8:
+            return None
+
+        base = self._proxy_components_if_valid(hard, soft, benchmark, plc, data)
+        if base is None:
+            return None
+
+        est = float(getattr(self, "_oracle_call_sec", 1.5) or 1.5)
+        max_calls_calc = int(max(2, min(18, (self._time_left(t0) - 2.5) / max(est, 0.4))))
+        if max_calls is None:
+            max_calls = max_calls_calc
+        else:
+            max_calls = int(max(2, min(int(max_calls), int(max_calls_calc))))
+        if max_calls < 2:
+            return None
+
+        def quick_local(candidate: np.ndarray, idx: int) -> Optional[np.ndarray]:
+            cand = candidate.astype(np.float32, copy=True)
+            self._clamp_hard(cand, data)
+            cand = self._local_legalize_indices(cand, [idx], data, passes=2, max_radius=14)
+            if self._hard_overlaps_any(idx, cand[idx], cand, data):
+                cand = self._tiny_fix_hard(cand, data, rounds=40)
+                cand = self._fast_legalize_hard(cand, data, sweeps=2)
+                if self._exact_hard_overlap_area(cand.astype(np.float64), data) > 1e-6:
+                    return None
+            return cand.astype(np.float32)
+
+        def dedup_dirs(vs: List[np.ndarray]) -> List[np.ndarray]:
+            out: List[np.ndarray] = []
+            for vec in vs:
+                vn = float(np.linalg.norm(vec))
+                if vn < 1e-6:
+                    continue
+                unit_v = (vec / vn).astype(np.float32)
+                keep = True
+                for prev in out:
+                    if float(np.dot(prev, unit_v)) > 0.98:
+                        keep = False
+                        break
+                if keep:
+                    out.append(unit_v)
+            return out
+
+        best_cost = float(base["proxy"])
+        best_hard = hard.copy().astype(np.float32)
+        best_soft = soft.copy().astype(np.float32)
+        cur_hard = best_hard.copy()
+        cur_soft = best_soft.copy()
+        unit = float(max(data.cell_w, data.cell_h))
+        calls = 1
+
+        while calls < max_calls and self._time_left(t0) > max(3.0, float(est) + 1.5):
+            all_pos = self._all_pos_np(cur_hard, cur_soft, data)
+            net_centers = self._net_box_centers_np(all_pos, data)
+            poor = self._diagnose_poor_macros(cur_hard, cur_soft, data)
+            order = np.argsort(-poor)[: min(8, data.num_hard)]
+
+            ranked: List[Tuple[float, np.ndarray, int]] = []
+            for idx in order:
+                idx = int(idx)
+                if not data.movable_hard[idx]:
+                    continue
+                target = self._macro_net_target(idx, net_centers, data).astype(np.float32)
+                delta = (target - cur_hard[idx]).astype(np.float32)
+                dirs: List[np.ndarray] = [delta, -delta]
+                if abs(float(delta[0])) >= abs(float(delta[1])):
+                    if abs(float(delta[0])) > 1e-6:
+                        dirs.append(np.array([math.copysign(1.0, float(delta[0])), 0.0], dtype=np.float32))
+                        dirs.append(np.array([-math.copysign(1.0, float(delta[0])), 0.0], dtype=np.float32))
+                    if abs(float(delta[1])) > 1e-6:
+                        dirs.append(np.array([0.0, math.copysign(1.0, float(delta[1]))], dtype=np.float32))
+                        dirs.append(np.array([0.0, -math.copysign(1.0, float(delta[1]))], dtype=np.float32))
+                else:
+                    if abs(float(delta[1])) > 1e-6:
+                        dirs.append(np.array([0.0, math.copysign(1.0, float(delta[1]))], dtype=np.float32))
+                        dirs.append(np.array([0.0, -math.copysign(1.0, float(delta[1]))], dtype=np.float32))
+                    if abs(float(delta[0])) > 1e-6:
+                        dirs.append(np.array([math.copysign(1.0, float(delta[0])), 0.0], dtype=np.float32))
+                        dirs.append(np.array([-math.copysign(1.0, float(delta[0])), 0.0], dtype=np.float32))
+                for direction in dedup_dirs(dirs)[:4]:
+                    for step_mul in (0.35, 0.75, 1.15):
+                        cand_h = cur_hard.copy().astype(np.float32)
+                        cand_h[idx] += float(step_mul * unit) * direction
+                        cand_h = quick_local(cand_h, idx)
+                        if cand_h is None:
+                            continue
+                        ranked.append((float(self._cheap_score(cand_h, cur_soft, data)), cand_h, idx))
+                neigh = data.neighbor_lists[idx]
+                if neigh.size > 0:
+                    for nb in neigh[:4].tolist():
+                        nb = int(nb)
+                        if nb == idx or not data.movable_hard[nb]:
+                            continue
+                        cand_h = cur_hard.copy().astype(np.float32)
+                        cand_h[idx], cand_h[nb] = cand_h[nb].copy(), cand_h[idx].copy()
+                        self._clamp_hard(cand_h, data)
+                        cand_h = self._local_legalize_indices(cand_h, [idx, nb], data, passes=2, max_radius=14)
+                        if self._hard_overlaps_any(idx, cand_h[idx], cand_h, data) or self._hard_overlaps_any(nb, cand_h[nb], cand_h, data):
+                            cand_h = self._tiny_fix_hard(cand_h, data, rounds=40)
+                            cand_h = self._fast_legalize_hard(cand_h, data, sweeps=2)
+                            if self._exact_hard_overlap_area(cand_h.astype(np.float64), data) > 1e-6:
+                                continue
+                        ranked.append((float(self._cheap_score(cand_h, cur_soft, data)), cand_h, idx))
+                        break
+
+            if not ranked:
+                break
+
+            ranked.sort(key=lambda x: x[0])
+            best_local = None
+            best_local_cost = best_cost
+            seen_idx: set = set()
+            for _, cand_h, idx in ranked:
+                if calls >= max_calls or self._time_left(t0) <= max(2.0, float(est) + 0.8):
+                    break
+                if idx in seen_idx and len(seen_idx) >= 2:
+                    continue
+                seen_idx.add(idx)
+                comps = self._proxy_components_if_valid(cand_h, cur_soft, benchmark, plc, data)
+                calls += 1
+                if comps is None:
+                    continue
+                cost = float(comps["proxy"])
+                if PROFILE:
+                    import sys
+
+                    print(f"[PROFILE] {benchmark.name}: micro_polish idx={idx} proxy={cost:.4f}", file=sys.stderr)
+                if cost + 1e-9 < best_local_cost:
+                    best_local_cost = cost
+                    best_local = cand_h.copy()
+            if best_local is None:
+                break
+
+            cur_hard = best_local.copy()
+            if best_local_cost + 1e-9 < best_cost:
+                best_cost = best_local_cost
+                best_hard = cur_hard.copy()
+                best_soft = cur_soft.copy()
+
+        if best_cost + 1e-6 < float(base["proxy"]):
+            return best_hard, best_soft, label, self._cheap_score(best_hard, best_soft, data)
+        return None
 
     def _incremental_oracle_refine(
         self,
@@ -8086,8 +8372,11 @@ class Placer:
             return best
 
         for pick in [
+            _best_named(lambda n: n == "initial-gapfix"),
+            _best_named(lambda n: n == "legacy-base"),
+            _best_named(lambda n: n == "pair-base"),
+            _best_named(lambda n: n == "shelf-base"),
             _best_named(lambda n: "osa" in n),
-            _best_named(lambda n: n.startswith("periphery-exact")),
             _best_named(lambda n: n.startswith("gpu-pop-eplace")),
             _best_named(lambda n: n.startswith("periphery-")),
             _best_named(lambda n: n.startswith("affine-")),
@@ -8107,6 +8396,14 @@ class Placer:
             ordered.append(item)
         pool = ordered[: min(int(top_k), len(ordered))]
 
+        if PROFILE:
+            import sys
+
+            print(
+                f"[PROFILE] {benchmark.name}: shortlist={[str(item[2]) for item in pool]}",
+                file=sys.stderr,
+            )
+
         best_cost = float("inf")
         best_pair = (pool[0][0], pool[0][1])
         best_name = pool[0][2] if len(pool[0]) >= 3 else "unknown"
@@ -8124,6 +8421,14 @@ class Placer:
                 min_exact = int(max(min_exact, 3))
                 if self._time_left(time.time()) >= 12.0:
                     min_exact = int(max(min_exact, 5 if data.num_hard <= 420 else 4))
+            elif est is not None and 2.0 < float(est) <= 8.0 and TIME_BUDGET >= 300:
+                left_now = float(self._time_left(time.time()))
+                if left_now >= 6.0 * float(est) + 5.0:
+                    min_exact = int(max(min_exact, 6 if data.num_hard <= 420 else 5))
+                elif left_now >= 5.0 * float(est) + 6.0:
+                    min_exact = int(max(min_exact, 5 if data.num_hard <= 420 else 4))
+                elif left_now >= 4.0 * float(est) + 5.0:
+                    min_exact = int(max(min_exact, 4 if data.num_hard <= 420 else 3))
         except Exception:
             pass
         for hard, soft, name, _ in pool:

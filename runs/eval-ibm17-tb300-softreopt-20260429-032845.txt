@@ -1,0 +1,32 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm17... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm17\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm17/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[CPLACE] wl=0.0859 den=0.7214 cong=4.5908 ov=0.0000 proxy=2.7420 t=1.2s
+[SCALE] s=1.05 wl=0.0908 den=0.7471 cong=4.6202 ov=0.4399 proxy=90.7547
+[SCALE] s=1.10 wl=0.0917 den=0.7541 cong=4.5893 ov=0.0670 proxy=16.1538
+[SCALE] s=1.15 wl=0.0926 den=0.7171 cong=4.4766 ov=0.2470 proxy=52.0888
+[SCALE] s=1.20 wl=0.0935 den=0.7112 cong=4.4289 ov=0.7332 proxy=149.2975
+[SCALE] s=1.30 wl=0.0952 den=0.7184 cong=4.3025 ov=6.8116 proxy=1364.9347
+Traceback (most recent call last):
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 338, in <module>
+    main()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 801, in place
+    print(f"[DIAG] pre-SA oracle: proxy={starts_cost[0]:.4f}  "
+ValueError: Unknown format code 'f' for object of type 'str'

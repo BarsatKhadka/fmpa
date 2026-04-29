@@ -1,0 +1,34 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm07... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm07\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 35, Row: 32
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm07/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 35, Row: 32
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[CPLACE] wl=0.0936 den=1.0000 cong=5.1789 ov=0.0000 proxy=3.1831 t=0.7s
+[SCALE] s=1.05 wl=0.0868 den=1.0000 cong=4.6692 ov=0.5305 proxy=109.0185
+[SCALE] s=1.10 wl=0.0872 den=1.0012 cong=4.5227 ov=1.0576 proxy=214.3674
+[SCALE] s=1.15 wl=0.0876 den=1.0027 cong=4.4925 ov=1.6475 proxy=332.3286
+[SCALE] s=1.20 wl=0.0881 den=1.0068 cong=4.4534 ov=4.0116 proxy=805.1385
+[SCALE] s=1.30 wl=0.0890 den=1.0136 cong=4.3214 ov=6.4115 proxy=1285.0601
+[CPLACE] oracle: proxy=1.9556  den=1.170  cong=2.588
+[DIAG] pre-SA oracle: proxy=1.4760  den=0.821  cong=2.001
+Traceback (most recent call last):
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 338, in <module>
+    main()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 952, in place
+    # Oracle-evaluate each \u2192 give oracle SA diverse basins to start from.
+UnboundLocalError: local variable '_is_hi_den_fast' referenced before assignment

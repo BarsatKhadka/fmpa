@@ -1,0 +1,34 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm04... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm04\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 30
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm04/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 30
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[CPLACE] wl=0.1033 den=1.0000 cong=4.1897 ov=0.0000 proxy=2.6981 t=0.5s
+[SCALE] s=1.05 wl=0.0953 den=1.0082 cong=3.5525 ov=2.1869 proxy=439.7566
+[SCALE] s=1.10 wl=0.0962 den=1.0227 cong=3.4728 ov=5.1804 proxy=1038.4186
+[SCALE] s=1.15 wl=0.0970 den=1.0340 cong=3.4365 ov=7.1538 proxy=1433.0940
+[SCALE] s=1.20 wl=0.0977 den=1.0452 cong=3.4316 ov=9.0015 proxy=1802.6329
+[SCALE] s=1.30 wl=0.0990 den=1.1660 cong=3.5089 ov=27.1399 proxy=5430.4122
+[CPLACE] oracle: proxy=1.8105  den=1.159  cong=2.296
+[DIAG] pre-SA oracle: proxy=1.3133  den=0.782  cong=1.704
+Traceback (most recent call last):
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 338, in <module>
+    main()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 952, in place
+    if (_is_hi_den_fast and true_cong > 2.0
+UnboundLocalError: local variable '_is_hi_den_fast' referenced before assignment

@@ -1,0 +1,35 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm17... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm17\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm17/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[CPLACE] wl=0.0859 den=0.7214 cong=4.5908 ov=0.0000 proxy=2.7420 t=1.3s
+[SCALE] s=1.05 wl=0.0922 den=0.7573 cong=4.5766 ov=0.1709 proxy=36.9365
+[SCALE] s=1.10 wl=0.0931 den=0.7294 cong=4.5341 ov=0.0238 proxy=7.4808
+[SCALE] s=1.15 wl=0.0941 den=0.7210 cong=4.4678 ov=0.0443 proxy=11.5546
+[SCALE] s=1.20 wl=0.0950 den=0.7096 cong=4.4057 ov=0.5719 proxy=117.0314
+[SCALE] s=1.30 wl=0.0967 den=0.7411 cong=4.2925 ov=8.5901 proxy=1720.6350
+[DIAG] pre-SA oracle: proxy=inf  den=0.000  cong=0.000
+Traceback (most recent call last):
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 338, in <module>
+    main()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 885, in place
+    _bsw_res = self._gradient_phase_batched(
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 2771, in _gradient_phase_batched
+    _lc = float(lam_cong_maxs[_ni].item()) * min(1.0, (frac - _csf) / _cong_ramp)
+IndexError: index 8 is out of bounds for dimension 0 with size 8
