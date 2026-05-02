@@ -318,10 +318,11 @@ class Placer:
         # On GPU: true batched execution (all N in one forward/backward pass) → N_PAR× more
         # starts in the same budget vs sequential. On CPU: sequential (N_PAR=1).
         _use_gpu_par = torch.cuda.is_available()
-        # Push GPU harder: 16 parallel chains for richer Phase 0 sampling.
-        # Combined with density-first variant batches, this gives 16 distinct
-        # (init, ld, lc, schedule) combinations per outer loop iteration.
-        _n_par = 16 if _use_gpu_par else 1
+        _vram_gb = (torch.cuda.get_device_properties(0).total_memory / 1e9
+                    if _use_gpu_par else 0.0)
+        # Scale N_PAR and SA chains with available VRAM (8GB→16, 16GB→32, 48GB→64).
+        _n_par = (64 if _vram_gb > 40 else 32 if _vram_gb > 16 else 16) if _use_gpu_par else 1
+        _K_sa  = (128 if _vram_gb > 40 else 64 if _vram_gb > 16 else 32) if _use_gpu_par else 32
         # Total starts scales with parallelism: same wall-time, N_PAR× more exploration
         _max_topo = n_topo * _n_par
 
@@ -775,13 +776,13 @@ class Placer:
                 # Original .plc as one start — guards against pathological seeds.
                 p1b_starts.append(np.asarray(pos_init).copy())
 
-                # GPU parallel tempering: 32 chains across multi-start basins.
+                # GPU parallel tempering: K chains across multi-start basins.
                 p1b = self._gpu_parallel_sa(
                     best_cheap_pos.copy(), movable_idx, sizes_np, port_pos,
                     canvas_w, canvas_h, num_hard, grad_safe_nnp, grad_nnmask,
                     grid_rows, grid_cols, grad_hpwl_norm, cong_sa_end,
                     fast_eng=fast_eng if n_pairs_eng < 500_000 else None,
-                    lam_den=0.5, lam_cong=0.5, K=32,
+                    lam_den=0.5, lam_cong=0.5, K=_K_sa,
                     pos_starts=p1b_starts,
                 )
                 p1b = self._resolve(p1b, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
@@ -1267,8 +1268,15 @@ class Placer:
                 # Slow oracle (ibm17: ~30-50s/call) → very few evals per slot.
                 # Scale up SA temperature so each expensive eval explores more broadly.
                 _ora_t_scale = max(1.0, oracle_call_secs / 12.0)
+                _ora_no_improve = 0  # consecutive non-improving slots
                 for si, (s_cost_init, s_pos) in enumerate(sorted_starts):
                     if time.time() >= oracle_end - 5:
+                        break
+                    # Early-exit: 3 consecutive non-improving slots → oracle SA not helping.
+                    # Saves budget for SOFT_REOPT and prevents hard-deadline overruns on
+                    # slow-oracle benchmarks (ibm12: 83s/call, ibm17: 50-90s/call).
+                    if _ora_no_improve >= 3 and si >= 3:
+                        print(f"[ORA_SA_EXIT] {_ora_no_improve} consecutive non-improving slots, exiting early at si={si}", flush=True)
                         break
                     slot_end = min(time.time() + slot_dur, oracle_end)
                     result_s = self._plc_oracle_sa(
@@ -1280,8 +1288,12 @@ class Placer:
                     )
                     result_sr = self._resolve_fully(result_s, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
                     cost_s = self._true_cost(result_sr, benchmark, plc)
+                    print(f"[ORA_SA_SLOT {si}] cost={cost_s:.4f} best={best_global_cost:.4f} t={time.time()-t0:.0f}s")
                     if cost_s < best_global_cost:
                         best_global_cost = cost_s; best_pos = result_sr.copy()
+                        _ora_no_improve = 0
+                    else:
+                        _ora_no_improve += 1
                     # If budget remains after exhausting starts, add fresh perturbed restarts
                     if time.time() < oracle_end - slot_dur - 30 and si == len(sorted_starts) - 1:
                         p_extra = self._perturb(best_pos, movable_idx, sizes_np, canvas_w, canvas_h, 0.35)
@@ -1332,6 +1344,40 @@ class Placer:
                     best_pos = _best_pos_sr
             except Exception as _sr_e:
                 print(f"[SOFT_REOPT] failed: {_sr_e}", flush=True)
+
+        # ── SOFT_REOPT_FB: cong-aware fallback for moderate-density/high-cong ──
+        # Fires when den-only SOFT_REOPT was used (_is_hi_den_fast=False) but
+        # density+congestion are still high enough to benefit from cong-aware spread.
+        # Covers ibm16 (den=0.822, cong=2.057) which falls below the 0.88 threshold.
+        _sr_fb_cond = (
+            soft_movable_idx and plc is not None and
+            locals().get('oracle_is_fast', False) and
+            not locals().get('_is_hi_den_fast', False) and
+            locals().get('true_den', 0.0) > 0.78 and
+            locals().get('true_cong', 0.0) > 2.04 and
+            time.time() < hard_deadline - 12
+        )
+        if _sr_fb_cond:
+            try:
+                # Baseline: best cost so far (SOFT_REOPT result if it improved, else oracle SA)
+                _sr_fb_prev = locals().get('_sc_sr', float('inf'))
+                if not np.isfinite(_sr_fb_prev) or _sr_fb_prev >= locals().get('_prev_oracle_sr', float('inf')):
+                    _sr_fb_prev = locals().get('_prev_oracle_sr', float('inf'))
+                _fb_ddl = min(hard_deadline - 8, time.time() + 25)
+                _best_pos_fb = self._gradient_phase_soft(
+                    best_pos, soft_movable_idx, sizes_np, port_pos,
+                    canvas_w, canvas_h, num_hard,
+                    grad_safe_nnp, grad_nnmask, grid_rows, grid_cols, grad_hpwl_norm,
+                    _fb_ddl,
+                    cong_weight=2.0,
+                    fast_eng=fast_eng,
+                )
+                _sc_fb = self._true_cost(_best_pos_fb, benchmark, plc)
+                print(f"[SOFT_REOPT_FB] cong_w=2 oracle: {_sc_fb:.4f}  (prev: {_sr_fb_prev:.4f})", flush=True)
+                if np.isfinite(_sc_fb) and _sc_fb < _sr_fb_prev:
+                    best_pos = _best_pos_fb
+            except Exception as _fb_e:
+                print(f"[SOFT_REOPT_FB] failed: {_fb_e}", flush=True)
 
         # ── Phase 3: Final selection — oracle result vs pos_init ──────────────
         # Always resolve_fully best_pos first so phase 3 comparison is valid.
@@ -1893,94 +1939,6 @@ class Placer:
                     if cur_cost<best_cost: best_cost=cur_cost; best_p=p.copy()
         return best_p
 
-    # ── Density-force spread: explicit density-gradient spreading ────────────
-
-    def _density_spread_init(self, pos, movable_idx, sizes, port_pos,
-                              canvas_w, canvas_h, num_hard,
-                              nets_np, net_weights, macro_to_nets,
-                              grid_rows, grid_cols, n_iter=80, t_budget=12.0):
-        """
-        Force-direct macros out of dense regions using the exact density grid gradient.
-        Unlike smooth gradient (which fails because WL force dominates in initial.plc),
-        this directly computes density repulsion from the true ABU-like grid and blends
-        it with WL-centroid attraction. Purpose: reach a lower-density basin before oracle SA.
-
-        Each macro in a cell above density_threshold gets a net force:
-          F = alpha * (net_centroid - cur_pos) + (1-alpha) * density_repulsion
-        where alpha decreases with local density excess (denser → more spread force).
-        """
-        t0 = time.time()
-        cur = pos.copy()
-        port_np = port_pos if port_pos is not None else np.zeros((0, 2), dtype=np.float64)
-        n_ports = port_np.shape[0]
-        gw = canvas_w / grid_cols
-        gh = canvas_h / grid_rows
-        _total_macro_area = float(np.sum(sizes[:num_hard, 0] * sizes[:num_hard, 1]))
-        _canvas_area = float(canvas_w * canvas_h)
-        _utilization = _total_macro_area / max(_canvas_area, 1e-9)
-        # Target: spread to 110% of utilization (slight breathing room, like ePlace)
-        target_den = float(np.clip(_utilization * 1.10, 0.30, 0.80))
-
-        for it in range(n_iter):
-            if time.time() - t0 > t_budget:
-                break
-            step = 0.25 * (1.0 - 0.7 * it / n_iter)  # decaying step size
-
-            dg = self._density_grid(cur, num_hard, sizes, grid_rows, grid_cols, canvas_w, canvas_h)
-
-            # All-position array for net centroid computation
-            all_pos = np.vstack([cur, port_np]) if n_ports > 0 else cur.copy()
-
-            for i in movable_idx:
-                cx = min(int(cur[i, 0] / gw), grid_cols - 1)
-                cy = min(int(cur[i, 1] / gh), grid_rows - 1)
-                local_den = float(dg[cy, cx])
-                if local_den < target_den:
-                    continue  # already in a low-density cell
-
-                # Density excess determines how much we spread vs preserve WL
-                excess = max(0.0, local_den - target_den)
-                alpha_wl = max(0.15, 0.70 - 1.5 * excess)  # less WL pull when very dense
-
-                # WL force: weighted centroid of net partners
-                cx_sum = 0.0; cy_sum = 0.0; wt_sum = 0.0
-                for ni in macro_to_nets.get(i, []):
-                    wt = float(net_weights[ni]) if ni < len(net_weights) else 1.0
-                    for nv in nets_np[ni]:
-                        nv_int = int(nv)
-                        if nv_int == i:
-                            continue
-                        if nv_int < len(all_pos):
-                            cx_sum += wt * all_pos[nv_int, 0]
-                            cy_sum += wt * all_pos[nv_int, 1]
-                            wt_sum += wt
-                centroid_x = cx_sum / max(wt_sum, 1e-9)
-                centroid_y = cy_sum / max(wt_sum, 1e-9)
-
-                # Density repulsion: find nearest low-density cell in 5×5 neighborhood
-                best_r = cy; best_c = cx; best_den = local_den
-                for dr in range(-3, 4):
-                    for dc in range(-3, 4):
-                        r2 = cy + dr; c2 = cx + dc
-                        if 0 <= r2 < grid_rows and 0 <= c2 < grid_cols:
-                            if dg[r2, c2] < best_den:
-                                best_den = dg[r2, c2]; best_r = r2; best_c = c2
-                rep_x = (best_c + 0.5) * gw
-                rep_y = (best_r + 0.5) * gh
-
-                # Blend force
-                fx = alpha_wl * centroid_x + (1.0 - alpha_wl) * rep_x
-                fy = alpha_wl * centroid_y + (1.0 - alpha_wl) * rep_y
-
-                # Move a fraction toward target
-                w, h = sizes[i, 0], sizes[i, 1]
-                new_x = cur[i, 0] + step * (fx - cur[i, 0])
-                new_y = cur[i, 1] + step * (fy - cur[i, 1])
-                cur[i, 0] = float(np.clip(new_x, w / 2, canvas_w - w / 2))
-                cur[i, 1] = float(np.clip(new_y, h / 2, canvas_h - h / 2))
-
-        return cur
-
     # ── Constructive placement: build low-density overlap-free positions ─────────
     # Places macros one-by-one (largest first), guaranteeing:
     # 1. No physical overlap with any previously placed macro
@@ -2100,80 +2058,6 @@ class Placer:
             placed_boxes[idx] = pb_new
 
         return pos
-
-    def _cplace_add_density(self, density, macro_pos, macro_size,
-                             cell_w, cell_h, cell_area, grid_rows, grid_cols):
-        px, py = float(macro_pos[0]), float(macro_pos[1])
-        pw, ph = float(macro_size[0]), float(macro_size[1])
-        r_lo = max(0, int((py - ph/2) / cell_h))
-        r_hi = min(grid_rows - 1, int((py + ph/2) / cell_h))
-        c_lo = max(0, int((px - pw/2) / cell_w))
-        c_hi = min(grid_cols - 1, int((px + pw/2) / cell_w))
-        for r in range(r_lo, r_hi + 1):
-            for c in range(c_lo, c_hi + 1):
-                ov_x = min(px+pw/2, (c+1)*cell_w) - max(px-pw/2, c*cell_w)
-                ov_y = min(py+ph/2, (r+1)*cell_h) - max(py-ph/2, r*cell_h)
-                if ov_x > 0 and ov_y > 0:
-                    density[r, c] += (ov_x * ov_y) / cell_area
-
-    # ── Spread legalization: topology-preserving density-spreading ────────────
-    # Replaces standard _resolve (which clusters to density=0.812) with a
-    # size-weighted rank spreading that achieves density ≈ physical utilization.
-    #
-    # Key insight: sort macros by current x-position, assign x-slots proportional
-    # to macro width (=size-weighted spacing). Since slot_width = w_i × canvas_w /
-    # total_w > w_i (because canvas_w > total_w for valid placement), macros fit
-    # within non-overlapping slots. Result: zero x-overlaps → zero 2D overlaps.
-    # Independent y-spreading via y-rank preserves 2D topology at low density.
-
-    def _spread_legalize(self, pos, num_hard, sizes_np, canvas_w, canvas_h,
-                         fixed_np, grid_rows, grid_cols, alpha=0.8):
-        p = pos.copy()
-        mov = [i for i in range(num_hard) if not fixed_np[i]]
-        n = len(mov)
-        if n == 0:
-            return p
-
-        cx = np.array([p[i, 0] for i in mov], dtype=np.float64)
-        cy = np.array([p[i, 1] for i in mov], dtype=np.float64)
-        sw = np.array([float(sizes_np[i, 0]) for i in mov])
-        sh = np.array([float(sizes_np[i, 1]) for i in mov])
-
-        # X-spreading: sort by x, assign size-proportional slot centers
-        x_order = np.argsort(cx)
-        total_w = float(np.sum(sw))
-        cum_w = 0.0
-        target_x = np.zeros(n, dtype=np.float64)
-        for rank in range(n):
-            k = x_order[rank]
-            target_x[k] = (cum_w + sw[k] / 2.0) / total_w * canvas_w
-            cum_w += sw[k]
-
-        # Y-spreading: sort by y, assign size-proportional slot centers
-        y_order = np.argsort(cy)
-        total_h = float(np.sum(sh))
-        cum_h = 0.0
-        target_y = np.zeros(n, dtype=np.float64)
-        for rank in range(n):
-            k = y_order[rank]
-            target_y[k] = (cum_h + sh[k] / 2.0) / total_h * canvas_h
-            cum_h += sh[k]
-
-        # Apply blend: alpha=1.0 → full spread (guaranteed overlap-free),
-        # alpha<1.0 → preserves more WL topology from gradient, may need resolve
-        for k, i in enumerate(mov):
-            w, h = float(sizes_np[i, 0]), float(sizes_np[i, 1])
-            nx = alpha * target_x[k] + (1.0 - alpha) * cx[k]
-            ny = alpha * target_y[k] + (1.0 - alpha) * cy[k]
-            p[i, 0] = float(np.clip(nx, w / 2.0, canvas_w - w / 2.0))
-            p[i, 1] = float(np.clip(ny, h / 2.0, canvas_h - h / 2.0))
-
-        # Limited overlap resolution: at alpha=1.0, canvas_w>total_w guarantees
-        # no overlaps so this is a no-op. For alpha<1.0 minor overlaps may remain.
-        _max_it = max(10, min(60, n // 2))
-        p = self._resolve(p, num_hard, sizes_np, canvas_w, canvas_h, fixed_np,
-                          max_iter=_max_it, min_iter=0)
-        return p
 
     # ── Lloyd / Voronoi spreading ─────────────────────────────────────────────
     # Iteratively moves each macro toward the centroid of its Voronoi cell.
@@ -4379,29 +4263,37 @@ class Placer:
         n_pairs = max(1, num_hard * (num_hard - 1) // 2)
         time_cap = max(3, int(250_000 // n_pairs))
         max_iter = max(min_iter, min(max_iter, time_cap))
-        p=pos.copy(); GAP=0.01
+        p = pos.copy(); GAP = 0.01
+        sw = sizes[:num_hard, 0]; sh = sizes[:num_hard, 1]
         for _ in range(max_iter):
-            moved=False
-            for i in range(num_hard):
-                for j in range(i+1,num_hard):
-                    xi,yi=p[i,0],p[i,1]; xj,yj=p[j,0],p[j,1]
-                    wi,hi=sizes[i,0],sizes[i,1]; wj,hj=sizes[j,0],sizes[j,1]
-                    ox=(wi+wj)/2-abs(xi-xj); oy=(hi+hj)/2-abs(yi-yj)
-                    if ox<=0 or oy<=0: continue
-                    if ox<oy:
-                        push=(ox+GAP)/2; dx_i=-push if xi<xj else +push
-                        dx_j=-dx_i; dy_i=dy_j=0.0
-                    else:
-                        push=(oy+GAP)/2; dy_i=-push if yi<yj else +push
-                        dy_j=-dy_i; dx_i=dx_j=0.0
-                    if not fixed[i]:
-                        p[i,0]=np.clip(xi+dx_i,wi/2,canvas_w-wi/2)
-                        p[i,1]=np.clip(yi+dy_i,hi/2,canvas_h-hi/2)
-                    if not fixed[j]:
-                        p[j,0]=np.clip(xj+dx_j,wj/2,canvas_w-wj/2)
-                        p[j,1]=np.clip(yj+dy_j,hj/2,canvas_h-hj/2)
-                    moved=True
-            if not moved: break
+            moved = False
+            for i in range(num_hard - 1):
+                xi, yi = p[i, 0], p[i, 1]
+                wi, hi = sw[i], sh[i]
+                xj = p[i+1:num_hard, 0]; yj = p[i+1:num_hard, 1]
+                wj = sw[i+1:num_hard];   hj = sh[i+1:num_hard]
+                ox = (wi + wj) * 0.5 - np.abs(xi - xj)
+                oy = (hi + hj) * 0.5 - np.abs(yi - yj)
+                mask = (ox > 0) & (oy > 0)
+                if not np.any(mask):
+                    continue
+                moved = True
+                px_m = mask & (ox < oy)
+                py_m = mask & ~px_m
+                sx = np.where(xi < xj, -1.0, 1.0)
+                sy = np.where(yi < yj, -1.0, 1.0)
+                if not fixed[i]:
+                    dxi = np.sum(np.where(px_m, sx * (ox + GAP) * 0.5, 0.0))
+                    dyi = np.sum(np.where(py_m, sy * (oy + GAP) * 0.5, 0.0))
+                    p[i, 0] = np.clip(xi + dxi, wi * 0.5, canvas_w - wi * 0.5)
+                    p[i, 1] = np.clip(yi + dyi, hi * 0.5, canvas_h - hi * 0.5)
+                fj = fixed[i+1:num_hard]
+                dxj = np.where(px_m & ~fj, -sx * (ox + GAP) * 0.5, 0.0)
+                dyj = np.where(py_m & ~fj, -sy * (oy + GAP) * 0.5, 0.0)
+                p[i+1:num_hard, 0] = np.clip(p[i+1:num_hard, 0] + dxj, wj * 0.5, canvas_w - wj * 0.5)
+                p[i+1:num_hard, 1] = np.clip(p[i+1:num_hard, 1] + dyj, hj * 0.5, canvas_h - hj * 0.5)
+            if not moved:
+                break
         return p
 
     def _resolve_fully(self, pos, num_hard, sizes, canvas_w, canvas_h, fixed, max_rounds=20):
@@ -4513,109 +4405,6 @@ class Placer:
                 p[idx, 1] = np.clip(pos_init[idx, 1] + delta, h / 2, canvas_h - h / 2)
         return p
 
-    def _spectral_cem(self, pos_init, movable_idx, sizes, nets_np, net_weights_np,
-                       num_hard, canvas_w, canvas_h, fixed_np,
-                       n_pop=2, cem_budget=60.0, cheap_cost_fn=None):
-        """Multi-spectral CEM using eigenvectors 2-8 of the macro Laplacian.
-
-        Each eigenvector is an orthogonal Fourier mode of the netlist graph —
-        a different frequency of connectivity structure. Seeds along mode k
-        place macros according to that topological decomposition, exploring
-        regions of the landscape that Fiedler-only seeding cannot reach.
-
-        Two strategies per mode:
-          (a) Spectral-sorted: rank macros by mode value, assign uniform positions
-              along that axis (pure topological layout, no WL bias).
-          (b) Large-amplitude perturbation: shift macros along the mode vector
-              by ±15-35% of canvas diagonal (landscape escaping).
-        """
-        try:
-            from scipy.sparse import csr_matrix
-            from scipy.sparse.linalg import eigsh
-        except ImportError:
-            return [pos_init.copy()]
-
-        t0_cem = time.time()
-        n_mov = len(movable_idx)
-        if n_mov < 3:
-            return [pos_init.copy()]
-
-        # Build sparse Laplacian over movable hard macros
-        idx_map = {idx: k for k, idx in enumerate(movable_idx)}
-        rows, cols, vals = [], [], []
-        for ni, nodes in enumerate(nets_np):
-            hards = [idx_map[int(v)] for v in nodes if idx_map.get(int(v)) is not None]
-            if len(hards) < 2:
-                continue
-            w = float(net_weights_np[ni]) if ni < len(net_weights_np) else 1.0
-            ew = w / max(1, len(hards) - 1)
-            for i in range(len(hards)):
-                for j in range(i + 1, len(hards)):
-                    rows += [hards[i], hards[j], hards[i], hards[j]]
-                    cols += [hards[j], hards[i], hards[i], hards[j]]
-                    vals += [-ew, -ew, ew, ew]
-
-        if not rows:
-            return [pos_init.copy()]
-
-        L = csr_matrix((vals, (rows, cols)), shape=(n_mov, n_mov))
-        # Request up to 8 non-trivial eigenvectors (modes 1-8 of graph spectrum).
-        # More modes = more orthogonal topological regions explored.
-        n_modes = min(8, n_mov - 1)
-        try:
-            _, vecs = eigsh(L, k=n_modes + 1, which='SM', tol=1e-3, maxiter=1000)
-            modes = []
-            for i in range(1, n_modes + 1):
-                v = np.real(vecs[:, i])
-                modes.append(v / (np.std(v) + 1e-9))
-        except Exception:
-            return [pos_init.copy()]
-
-        if time.time() - t0_cem > cem_budget - 3:
-            return [pos_init.copy()]
-
-        base_cost = cheap_cost_fn(pos_init) if cheap_cost_fn else float('inf')
-        candidates = [(base_cost, pos_init.copy())]
-        canvas_diag = canvas_w + canvas_h
-
-        # Strategy A: Spectral-sorted seeding for all mode pairs (vi→x, vj→y).
-        # Each pair represents a different "spectral coordinate frame" — macros
-        # are laid out according to their graph-frequency coordinates in that frame.
-        # This is the strongest diversity mechanism: seeds are structurally orthogonal.
-        for i in range(len(modes)):
-            for j in range(len(modes)):
-                if time.time() - t0_cem > cem_budget * 0.65:
-                    break
-                p = self._spectral_sorted_placement(
-                    pos_init, movable_idx, sizes, modes[i], modes[j],
-                    num_hard, canvas_w, canvas_h, fixed_np)
-                p = self._resolve(p, num_hard, sizes, canvas_w, canvas_h, fixed_np)
-                c = cheap_cost_fn(p) if cheap_cost_fn else float('inf')
-                candidates.append((c, p))
-
-        # Strategy B: Large-amplitude perturbations along each mode.
-        # Amplitudes ±0.15 and ±0.30 give near and far explorations.
-        for mi, mode in enumerate(modes[:4]):
-            for amp in [-0.30, -0.15, 0.15, 0.30]:
-                if time.time() - t0_cem > cem_budget - 1:
-                    break
-                p = pos_init.copy()
-                for k, idx in enumerate(movable_idx):
-                    if k >= len(mode):
-                        break
-                    w_s, h_s = sizes[idx, 0], sizes[idx, 1]
-                    delta = canvas_diag * amp * mode[k]
-                    if mi % 2 == 0:
-                        p[idx, 0] = np.clip(pos_init[idx, 0] + delta, w_s / 2, canvas_w - w_s / 2)
-                    else:
-                        p[idx, 1] = np.clip(pos_init[idx, 1] + delta, h_s / 2, canvas_h - h_s / 2)
-                p = self._resolve(p, num_hard, sizes, canvas_w, canvas_h, fixed_np)
-                c = cheap_cost_fn(p) if cheap_cost_fn else float('inf')
-                candidates.append((c, p))
-
-        candidates.sort(key=lambda x: x[0])
-        return [c[1] for c in candidates[:n_pop]]
-
     def _random_start(self, pos_init, movable_idx, sizes, canvas_w, canvas_h, fixed_np):
         """Quadrant-shuffle placement: divide canvas into 4 quadrants, shuffle which
         macro group goes where. Gives topology diversity while staying partially legal.
@@ -4689,26 +4478,6 @@ class Placer:
             p[idx,0]=np.clip(p[idx,0]+np.random.normal(0,noise),w/2,canvas_w-w/2)
             p[idx,1]=np.clip(p[idx,1]+np.random.normal(0,noise),h/2,canvas_h-h/2)
         return p
-
-    def _spatial_crossover(self, pa, pb, movable_idx, canvas_w, canvas_h):
-        """Spatial block crossover: take macros in a random half of the canvas
-        from parent A, macros in the other half from parent B.
-        Preserves spatial clusters from each parent."""
-        child = pa.copy()
-        # Random split: horizontal or vertical at a random position
-        if random.random() < 0.5:
-            # Vertical split: x < split_x from pa, x >= split_x from pb
-            split = canvas_w * (0.3 + random.random() * 0.4)  # 30%-70% of canvas
-            for idx in movable_idx:
-                if pb[idx, 0] < split:
-                    child[idx] = pb[idx].copy()
-        else:
-            # Horizontal split: y < split_y from pa, y >= split_y from pb
-            split = canvas_h * (0.3 + random.random() * 0.4)
-            for idx in movable_idx:
-                if pb[idx, 1] < split:
-                    child[idx] = pb[idx].copy()
-        return child
 
     @staticmethod
     def _hpwl_vec(ap, safe_nnp, nnmask):
