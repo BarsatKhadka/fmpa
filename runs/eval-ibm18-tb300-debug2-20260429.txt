@@ -1,0 +1,27 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm18... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm18\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 55, Row: 39
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm18/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 55, Row: 39
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[BISECT] den=0.5243 ov=0.0000
+[CPLACE] wl=0.0843 den=0.5896 cong=4.0325 ov=0.0000 proxy=2.3954 t=0.6s
+[SCALE] s=1.05 wl=0.0842 den=0.5728 cong=3.8967 ov=0.0024 proxy=2.7967
+[SCALE] s=1.10 wl=0.0845 den=0.5794 cong=3.8677 ov=0.0920 proxy=20.7135
+[SCALE] s=1.15 wl=0.0848 den=0.5872 cong=3.8405 ov=0.2901 proxy=60.3197
+[SCALE] s=1.20 wl=0.0850 den=0.6011 cong=3.7977 ov=1.5916 proxy=320.6123
+[SCALE] s=1.30 wl=0.0855 den=0.6042 cong=3.7866 ov=3.4496 proxy=692.2087
+[DBG] oracle_is_fast=False best_spread_pos=not None
+[DIAG] pre-SA oracle: proxy=1.7899  den=1.038  cong=2.435
+[DBG3] entering Phase 3: best_global_cost=1.7898716926574707
+proxy=2.5641  (wl=0.010 den=3.821 cong=1.287)  VALID  [270.66s]

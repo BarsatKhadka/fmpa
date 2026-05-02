@@ -8,7 +8,8 @@
       "Bash(wsl *)",
       "Bash(echo \"exit: $?\")",
       "Bash(*)",
-      "Bash(echo \"Pull PID: $!\")"
+      "Bash(echo \"Pull PID: $!\")",
+      "PowerShell(Get-Process *)"
     ]
   }
 }

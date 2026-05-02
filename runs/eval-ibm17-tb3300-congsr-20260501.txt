@@ -1,0 +1,44 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm17... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm17\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm17/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[BISECT] den=0.6081 ov=0.0000
+[CPLACE] wl=0.0859 den=0.7214 cong=4.5908 ov=0.0000 proxy=2.7420 t=1.1s
+[SCALE] s=1.05 wl=0.0918 den=0.7113 cong=4.5823 ov=0.2381 proxy=50.3659
+[SCALE] s=1.10 wl=0.0927 den=0.7038 cong=4.5328 ov=0.1234 proxy=27.3997
+[SCALE] s=1.15 wl=0.0936 den=0.6885 cong=4.4731 ov=0.1104 proxy=24.7472
+[SCALE] s=1.20 wl=0.0946 den=0.6822 cong=4.4354 ov=0.2087 proxy=44.3913
+[SCALE] s=1.30 wl=0.0963 den=0.7110 cong=4.3780 ov=5.7864 proxy=1159.9173
+C:\actions-runner\_work\pytorch\pytorch\pytorch\aten\src\ATen\native\cuda\ScatterGatherKernel.cu:164: block: [2106,0,0], thread: [76,0,0] Assertion `idx_dim >= 0 && idx_dim < index_size && "scatter gather kernel index out of bounds"` failed.
+Traceback (most recent call last):
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\Scripts\evaluate.exe\__main__.py", line 10, in <module>
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 779, in place
+    p1b = self._gpu_parallel_sa(
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 4314, in _gpu_parallel_sa
+    bk = cost_cur.argmin().item()
+torch.AcceleratorError: CUDA error: device-side assert triggered
+Search for `cudaErrorAssert' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

@@ -1,0 +1,39 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm01... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm01\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[BISECT] pre-resolve: den=1.0299 ov=2.5672
+[BISECT] post-resolve: den=1.0061 ov=0.5238
+fatal   : Memory allocation failure
+Traceback (most recent call last):
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\Scripts\evaluate.exe\__main__.py", line 10, in <module>
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 416, in place
+    _grad_res = self._gradient_phase_batched(
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 2790, in _gradient_phase_batched
+    _kx2 = torch.fft.fftfreq(grid_rows, device=dev).pow(2).unsqueeze(1)
+torch.AcceleratorError: CUDA error: unknown error
+Search for `cudaErrorUnknown' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

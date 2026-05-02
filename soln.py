@@ -265,6 +265,55 @@ class Placer:
         except Exception:
             pass
 
+        # ── Bisection → best_spread_pos for oracle direct evaluation ──────────────
+        # Spectral recursive bisection gives den≈0.60 for ibm17 (vs gradient's 0.945).
+        # We don't run anchor-gradient (complex, eats Phase 0 budget). Instead, we
+        # record the clean bisection result as best_spread_pos so Phase 2 can oracle-
+        # evaluate it directly when oracle_is_fast=True (e.g. ibm17 at 3300s budget).
+        # The oracle explores the spread basin from this low-density starting point.
+        _bisect_raw = None  # clean bisection position for oracle direct evaluation
+        if _spec_modes is not None and len(_spec_modes) >= 2 and len(movable_idx) >= 2:
+            try:
+                _spec_xy = np.zeros((num_hard, 2))
+                for _k, _midx in enumerate(movable_idx):
+                    _spec_xy[_midx, 0] = float(_spec_modes[0][_k]) if _k < len(_spec_modes[0]) else 0.0
+                    _spec_xy[_midx, 1] = float(_spec_modes[1][_k]) if _k < len(_spec_modes[1]) else 0.0
+                for _ax in range(2):
+                    _vals = _spec_xy[movable_idx, _ax]
+                    _lo, _hi = float(_vals.min()), float(_vals.max())
+                    _spec_xy[movable_idx, _ax] = (_vals - _lo) / (_hi - _lo) if _hi - _lo > 1e-6 else 0.5
+                _hard_areas_b = np.array([sizes_np[i, 0] * sizes_np[i, 1] for i in range(num_hard)])
+                _p_bisect = pos_init.copy()
+
+                def _rec_bis(inds, ax, rect):
+                    lx, ly, ux, uy = rect
+                    if len(inds) == 0: return
+                    if len(inds) == 1:
+                        idx = int(inds[0]); w, h = sizes_np[idx, 0], sizes_np[idx, 1]
+                        _p_bisect[idx] = [np.clip((lx+ux)*0.5, w/2, canvas_w-w/2),
+                                          np.clip((ly+uy)*0.5, h/2, canvas_h-h/2)]
+                        return
+                    _ord = inds[np.argsort(_spec_xy[inds, ax], kind='mergesort')]
+                    _cum = np.cumsum(_hard_areas_b[_ord]); _tot = float(_cum[-1])
+                    _sp = max(1, min(int(np.searchsorted(_cum, _tot*0.5)+1), len(_ord)-1))
+                    _lr = float(np.clip(_hard_areas_b[_ord[:_sp]].sum()/max(_tot,1e-6), 0.20, 0.80))
+                    _mid = (lx + (ux-lx)*_lr) if ax == 0 else (ly + (uy-ly)*_lr)
+                    if ax == 0:
+                        _rec_bis(_ord[:_sp], 1, (lx, ly, _mid, uy)); _rec_bis(_ord[_sp:], 1, (_mid, ly, ux, uy))
+                    else:
+                        _rec_bis(_ord[:_sp], 0, (lx, ly, ux, _mid)); _rec_bis(_ord[_sp:], 0, (lx, _mid, ux, uy))
+
+                _rec_bis(np.array(movable_idx, dtype=np.int64), 0, (0.0, 0.0, canvas_w, canvas_h))
+                _p_bisect = self._resolve(_p_bisect, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                _wl_b, _de_b, _co_b, _ov_b = cheap_components(_p_bisect)
+                print(f"[BISECT] den={_de_b:.4f} ov={_ov_b:.4f}", flush=True)
+                if _de_b < 0.85 and _ov_b < 1e-3:
+                    _bisect_raw = _p_bisect.copy()
+                else:
+                    print(f"[BISECT] skipped: den too high ({_de_b:.4f})", flush=True)
+            except Exception as _bis_e:
+                print(f"[BISECT] failed: {_bis_e}", flush=True)
+
         # GPU-batched multi-world sweep: run N_PAR gradient starts simultaneously.
         # On GPU: true batched execution (all N in one forward/backward pass) → N_PAR× more
         # starts in the same budget vs sequential. On CPU: sequential (N_PAR=1).
@@ -446,6 +495,8 @@ class Placer:
         best_spread_pos  = None
         best_spread_cost = float('inf')
         try:
+            if len(movable_idx) > 450 and TIME_BUDGET < 700:
+                raise Exception("skipping CPLACE: large slow-oracle benchmark (oracle_is_fast=False)")
             _t_cp = time.time()
             _cp_pos = self._constructive_place(
                 movable_idx, sizes_np, num_hard, canvas_w, canvas_h,
@@ -472,7 +523,7 @@ class Placer:
         # For port-dominated nets (most IBM), ports anchor bounding boxes → WL barely
         # increases even for large s. Net oracle proxy: could drop below 1.0385.
         # s=1.10: den≈0.812/1.21≈0.671, WL≈0.070 → proxy≈0.975 (better than RePlAce).
-        if topology_seeds:
+        if topology_seeds and not (len(movable_idx) > 450 and TIME_BUDGET < 700):
             _best_p0 = topology_seeds[0]
             _cmx = float(np.mean([_best_p0[_i, 0] for _i in movable_idx]))
             _cmy = float(np.mean([_best_p0[_i, 1] for _i in movable_idx]))
@@ -496,6 +547,15 @@ class Placer:
                 if _ov < 1e-3 and _de < best_spread_cost and np.isfinite(_pr):
                     best_spread_cost = float(_de)
                     best_spread_pos  = _p_scale.copy()
+
+        # Bisection raw → best_spread_pos: den≈0.60 is much lower than CPLACE/SCALE.
+        # Oracle-evaluated directly in Phase 2 when oracle_is_fast=True, giving the SA
+        # a spread-basin starting point instead of the collapsed-gradient basin.
+        if _bisect_raw is not None:
+            _wl_br, _de_br, _co_br, _ov_br = cheap_components(_bisect_raw)
+            if _ov_br < 1e-3 and _de_br < best_spread_cost:
+                best_spread_cost = float(_de_br)
+                best_spread_pos  = _bisect_raw.copy()
 
         # Re-rank including spread seeds
         _topo_rank     = sorted(range(len(topology_seeds)), key=lambda i: topology_costs[i])
@@ -645,6 +705,7 @@ class Placer:
                 if _c_hybro < best_cheap_cost:
                     best_cheap_cost = _c_hybro
                     best_cheap_pos  = _hybro_pos.copy()
+                    print(f"[HYBRO] improved: {_c_hybro:.4f}", flush=True)
             except Exception:
                 pass  # hybro optional: never block main pipeline on error
 
@@ -762,9 +823,16 @@ class Placer:
                 t_oc0 = time.time()
                 init_cost, init_comps = self._true_cost(init_r, benchmark, plc, return_components=True)
                 oracle_call_secs = time.time() - t_oc0
-                # If oracle calls are very slow (ibm17: ~90s each), skip oracle SA entirely.
-                # Use gradient result directly — two oracle calls would burn >30% of budget.
-                oracle_is_fast = (oracle_call_secs < 60.0)
+                # Dynamic check: oracle SA is viable only if we have time for ≥3 evaluations.
+                # Robust against system-load variance (e.g. ibm17 oracle can swing 90s→400s
+                # under load; a fixed multiplier like 0.04×TB=132s is fragile).
+                # Also enforce absolute minimum: oracle must be faster than 60% of budget.
+                _time_remaining_for_sa = oracle_end - time.time()
+                _min_oracle_sa_evals = 3
+                oracle_is_fast = (
+                    _time_remaining_for_sa > oracle_call_secs * _min_oracle_sa_evals
+                    and oracle_call_secs < TIME_BUDGET * 0.60
+                )
 
             # Best of gradient result vs pos_init as primary start.
             starts = [init_r]
@@ -805,6 +873,7 @@ class Placer:
             print(f"[DIAG] pre-SA oracle: proxy={starts_cost[0]:.4f}  "
                   f"den={_diag_comps.get('density_cost', 0.0):.3f}  "
                   f"cong={_diag_comps.get('congestion_cost', 0.0):.3f}", flush=True)
+            print(f"[PH2_ENTER] oracle_is_fast={oracle_is_fast} oracle_call_secs={oracle_call_secs:.1f}", flush=True)
 
             # Surrogate calibration: compare oracle components with surrogate estimates.
             # If oracle density > surrogate, gradient phase under-penalized density → boost λ_den.
@@ -832,11 +901,7 @@ class Placer:
             # path: we measured what hparams actually produce low proxy on THIS
             # benchmark's gradient, instead of relying on a fixed schedule.
             if adaptive_ld is not None and adaptive_lc is not None:
-                # MAX-blend (not mean-blend): take the stronger penalty signal.
-                # Findings from 2026-04-28 sweep: every benchmark is density-
-                # dominated (den 0.7-0.95). The classic calib was too weak on
-                # density. The adaptive surrogate often suggests ld>2.0; using
-                # max preserves that signal instead of regressing to weak calib.
+                # MAX-blend: take the stronger penalty signal from adaptive or oracle calib.
                 calib_lam_den  = float(np.clip(max(calib_lam_den,  adaptive_ld), 0.05, 4.0))
                 calib_lam_cong = float(np.clip(max(calib_lam_cong, adaptive_lc), 0.01, 4.0))
                 # If the diagnostic flagged density as the dominant cost AND
@@ -845,8 +910,6 @@ class Placer:
                     if adaptive_diag.get('den_floor', 0) > 0.85 and adaptive_diag['dominant_axis'] in ('den', 'cong'):
                         calib_lam_den = float(np.clip(calib_lam_den * 1.5, 0.05, 4.0))
             elif cached_hparams is not None:
-                # Cold start (first run on this benchmark), but cache hits from
-                # a prior run — use those.
                 calib_lam_den  = float(cached_hparams.get('ld', calib_lam_den))
                 calib_lam_cong = float(cached_hparams.get('lc', calib_lam_cong))
 
@@ -860,7 +923,9 @@ class Placer:
                 grad2_budget = t0 + (TIME_BUDGET - 30) * 0.75
             else:
                 grad2_budget = t0 + (TIME_BUDGET - 30) * 0.80  # more time for slow-oracle
-            _is_hi_den_fast = False  # set properly in elif branch below; default False for cong_sweep path
+            # Pre-compute unconditionally so SOFT_REOPT gets cong_w=2 even when GRAD2 budget is
+            # exceeded (e.g. ibm17 with oracle_call_secs=235s skips the time-gated block).
+            _is_hi_den_fast = (oracle_is_fast and len(soft_movable_idx) > 0 and true_den > 0.88)
             if time.time() < grad2_budget - 20:
                 _use_cong_sweep = (not oracle_is_fast and surr_cong > 2.0
                                    and _use_gpu_par and _n_par > 1)
@@ -945,6 +1010,45 @@ class Placer:
                                     starts_cost.append(_g2_sc)
                         except Exception:
                             pass
+
+            # ── Soft-background density seeds (oracle density gap fix) ───────
+            # Root cause of ibm17 oracle density gap: gradient uses hard-only
+            # density (n_den_macros=num_hard) but oracle measures combined hard+soft.
+            # Fix: pass soft macro positions as fixed background density → gradient
+            # pushes hard macros away from cells occupied by soft macros → lower
+            # combined oracle density. Two targets: gentle (0.85) and aggressive (0.70).
+            # Runs BEFORE GRAD_HC so it gets first access to the pre-oracle time window.
+            if (soft_movable_idx and _is_hi_den_fast
+                    and time.time() < oracle_end - 240):
+                _sb_bg_pos   = best_cheap_pos[np.array(soft_movable_idx)]
+                _sb_bg_sizes = sizes_np[np.array(soft_movable_idx)]
+                for _sb_tgt in [0.85, 0.70]:
+                    if time.time() >= oracle_end - 210:
+                        break
+                    try:
+                        _sb_ddl = min(time.time() + 25, oracle_end - 185)
+                        _sb_gpos = self._gradient_phase(
+                            best_cheap_pos, movable_idx, sizes_np, port_pos,
+                            canvas_w, canvas_h, num_hard,
+                            grad_safe_nnp, grad_nnmask, grid_rows, grid_cols,
+                            grad_hpwl_norm, _sb_ddl,
+                            fast_eng=fast_eng,
+                            lam_den_override=calib_lam_den,
+                            lam_cong_override=calib_lam_cong,
+                            gamma_scale=calib_gamma_scale,
+                            soft_bg_pos=_sb_bg_pos,
+                            soft_bg_sizes=_sb_bg_sizes,
+                            target_den_final_override=_sb_tgt,
+                        )
+                        _sb_gpos = self._resolve_fully(
+                            _sb_gpos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                        _sb_sc = self._true_cost(_sb_gpos, benchmark, plc)
+                        print(f"[SOFT_BG_SEED] tgt={_sb_tgt} oracle: {_sb_sc:.4f}", flush=True)
+                        if np.isfinite(_sb_sc):
+                            starts.append(_sb_gpos)
+                            starts_cost.append(_sb_sc)
+                    except Exception:
+                        pass
 
             # ── Extra high-cong gradient seeds (ibm15/ibm17: cong>2.0) ───────
             # When gradient always finds the same high-cong basin (1.7392 for ibm17),
@@ -1212,14 +1316,18 @@ class Placer:
             try:
                 _prev_oracle_sr = locals().get('best_global_cost', float('inf'))
                 _soft_ddl = min(hard_deadline - 8, time.time() + 25)
+                _sr_cong_w = 2.0 if locals().get('_is_hi_den_fast', False) else 0.0
                 _best_pos_sr = self._gradient_phase_soft(
                     best_pos, soft_movable_idx, sizes_np, port_pos,
                     canvas_w, canvas_h, num_hard,
                     grad_safe_nnp, grad_nnmask, grid_rows, grid_cols, grad_hpwl_norm,
                     _soft_ddl,
+                    cong_weight=_sr_cong_w,
+                    fast_eng=fast_eng,
                 )
                 _sc_sr = self._true_cost(_best_pos_sr, benchmark, plc)
-                print(f"[SOFT_REOPT] oracle: {_sc_sr:.4f}  (prev: {_prev_oracle_sr:.4f})", flush=True)
+                _sr_mode = f"cong_w={_sr_cong_w:.0f}" if _sr_cong_w > 0 else "den_only"
+                print(f"[SOFT_REOPT] {_sr_mode} oracle: {_sc_sr:.4f}  (prev: {_prev_oracle_sr:.4f})", flush=True)
                 if np.isfinite(_sc_sr) and _sc_sr < _prev_oracle_sr:
                     best_pos = _best_pos_sr
             except Exception as _sr_e:
@@ -2140,7 +2248,9 @@ class Placer:
                         safe_nnp, nnmask, grid_rows, grid_cols, hpwl_norm, deadline,
                         fast_eng=None, lam_den_override=None, lam_cong_override=None,
                         gamma_scale=1.0, cong_start_frac=0.60,
-                        target_den_start=None, lam_den_start_frac=0.05):
+                        target_den_start=None, lam_den_start_frac=0.05,
+                        anchor_pos=None, anchor_weight=0.0, anchor_decay_frac=0.5,
+                        soft_bg_pos=None, soft_bg_sizes=None, target_den_final_override=None):
         """Phase 0/2b: Adam on smooth WL + soft density + soft congestion.
         Override params allow surrogate calibration from oracle feedback."""
         n_mov = len(movable_idx)
@@ -2204,6 +2314,39 @@ class Placer:
         cell_ty = cell_by + cell_h
         _smooth_r = int(fast_eng['smooth']) if (fast_eng is not None and 'smooth' in fast_eng) else 0
 
+        # Fixed soft-macro background density for joint hard+soft optimization.
+        # Soft positions are held constant; gradient on hard macros sees the combined
+        # overflow → hard macros are pushed away from cells occupied by soft macros.
+        soft_bg_den_t = None
+        if soft_bg_pos is not None and soft_bg_sizes is not None and len(soft_bg_pos) > 0:
+            with torch.no_grad():
+                _sb_pt = torch.from_numpy(np.asarray(soft_bg_pos, dtype=np.float32)).to(dev)
+                _sb_st = torch.from_numpy(np.asarray(soft_bg_sizes, dtype=np.float32)).to(dev)
+                _sb_lx = _sb_pt[:, 0] - _sb_st[:, 0] / 2
+                _sb_rx = _sb_pt[:, 0] + _sb_st[:, 0] / 2
+                _sb_by = _sb_pt[:, 1] - _sb_st[:, 1] / 2
+                _sb_ty = _sb_pt[:, 1] + _sb_st[:, 1] / 2
+                _sb_cx = torch.clamp(
+                    torch.minimum(_sb_rx.unsqueeze(1), cell_rx.unsqueeze(0)) -
+                    torch.maximum(_sb_lx.unsqueeze(1), cell_lx.unsqueeze(0)),
+                    min=0.0) / cell_w
+                _sb_cy = torch.clamp(
+                    torch.minimum(_sb_ty.unsqueeze(1), cell_ty.unsqueeze(0)) -
+                    torch.maximum(_sb_by.unsqueeze(1), cell_by.unsqueeze(0)),
+                    min=0.0) / cell_h
+                soft_bg_den_t = torch.einsum('ic,ir->rc', _sb_cx, _sb_cy).detach()
+                if _smooth_r > 0:
+                    _ks = 2 * _smooth_r + 1
+                    soft_bg_den_t = torch.nn.functional.avg_pool2d(
+                        torch.nn.functional.pad(
+                            soft_bg_den_t.unsqueeze(0).unsqueeze(0),
+                            [_smooth_r] * 4, mode='replicate'),
+                        _ks, stride=1, padding=0).squeeze(0).squeeze(0)
+            _sb_arr = np.asarray(soft_bg_sizes, dtype=np.float32)
+            _sb_util = float((_sb_arr[:, 0] * _sb_arr[:, 1]).sum()) / max(float(canvas_w * canvas_h), 1e-9)
+            print(f"[SOFT_BG] n_soft={len(soft_bg_pos)}, soft_util={_sb_util:.3f}, "
+                  f"soft_max_den={float(soft_bg_den_t.max().item()):.3f}", flush=True)
+
         canvas_diag  = float(canvas_w + canvas_h)
         gamma_start  = canvas_diag * 0.04 * gamma_scale   # coarse smooth at start
         gamma_end    = canvas_diag * 0.004 * gamma_scale  # sharp at end
@@ -2215,6 +2358,12 @@ class Placer:
         _canvas_area = float(canvas_w * canvas_h)
         _utilization = _macro_area / max(_canvas_area, 1e-9)
         target_den_final = float(np.clip(_utilization * 1.08, 0.50, 0.82))
+        # For ePlace-continuation worlds (low density start), cap at 0.70 for sparse
+        # benchmarks so macros settle in a lower-density basin (~RePlAce's 0.70-0.75).
+        if target_den_start is not None and target_den_start < 0.20 and _utilization < 0.85:
+            target_den_final = min(target_den_final, 0.70)
+        if target_den_final_override is not None:
+            target_den_final = float(target_den_final_override)
         # ePlace/RePlAce density continuation: ramp target_den from a low value up to
         # the physical utilization × 1.08. When target_den_start is near 0, every cell
         # contributes to the density penalty from step 1, forcing global spreading.
@@ -2304,6 +2453,13 @@ class Placer:
         top_k_den_h = max(1, int(grid_rows * grid_cols * 0.10))
         tau_den_h   = 0.5  # will be annealed inside loop
 
+        # Anchor tensor: topology preservation for spread seeds (bisection / CPLACE / SCALE).
+        # anchor_weight decays to 0 over anchor_decay_frac of gradient time, then pure WL+den.
+        anchor_t = None
+        if anchor_weight > 0.0 and anchor_pos is not None:
+            _anc_np = anchor_pos[mov_arr].astype(np.float32)
+            anchor_t = torch.from_numpy(_anc_np).to(dev)
+
         step = 0
         t_first = None
 
@@ -2368,7 +2524,8 @@ class Placer:
                         density.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                     _ks, stride=1, padding=0).squeeze(0).squeeze(0)
             _target_t = torch.tensor(target_den_cur, dtype=torch.float32, device=dev)
-            den_ovflow = torch.clamp(density - _target_t, min=0.0)
+            density_penalty = density if soft_bg_den_t is None else density + soft_bg_den_t
+            den_ovflow = torch.clamp(density_penalty - _target_t, min=0.0)
             _rho_hat = torch.fft.rfft2(den_ovflow)
             _phi_es  = torch.fft.irfft2(_rho_hat * phi_green_t, s=(grid_rows, grid_cols))
             fft_den  = (den_ovflow * _phi_es).mean() / _phi_norm
@@ -2450,6 +2607,11 @@ class Placer:
                 cong_loss = (torch.logsumexp(excess_flat / tau_cong, dim=0) * tau_cong) / top_k
 
             loss = wl_loss + lam_den * den_loss + lam_cong * cong_loss
+            if anchor_t is not None and anchor_weight > 0.0:
+                _anc_frac = min(1.0, frac / max(anchor_decay_frac, 1e-6))
+                _w_anc = anchor_weight * (1.0 - _anc_frac)
+                if _w_anc > 0.0:
+                    loss = loss + _w_anc * ((x_param - anchor_t) ** 2).sum() / (canvas_diag ** 2)
             if x_param.grad is not None:
                 x_param.grad = None
             loss.backward()
@@ -2510,7 +2672,8 @@ class Placer:
                         torch.nn.functional.pad(
                             dens_ov.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                         _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-                overflow_frac = float((dens_ov > target_den_final).float().mean())
+                _dens_ov_check = dens_ov if soft_bg_den_t is None else dens_ov + soft_bg_den_t
+                overflow_frac = float((_dens_ov_check > target_den_final).float().mean())
                 # Surrogate cost before overflow pass (WL + density, no overlap)
                 node_x_bef = pos_ov[safe_t, 0]
                 node_y_bef = pos_ov[safe_t, 1]
@@ -2522,7 +2685,8 @@ class Placer:
                            torch.logsumexp(-nx_min_bef / gamma_end, 1) +
                            torch.logsumexp(ny_max_bef / gamma_end, 1) +
                            torch.logsumexp(-ny_min_bef / gamma_end, 1)) * gamma_end).sum() / hpwl_norm
-                den_bef = torch.logsumexp(dens_ov.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
+                dens_ov_pen = dens_ov if soft_bg_den_t is None else dens_ov + soft_bg_den_t
+                den_bef = torch.logsumexp(dens_ov_pen.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
                 cost_before = float(wl_bef + lam_den_end * den_bef)
                 x_param_snapshot = x_param.data.clone()
 
@@ -2571,7 +2735,8 @@ class Placer:
                             torch.nn.functional.pad(
                                 dens2.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                             _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-                    dens2_flat = dens2.view(-1)
+                    dens2_penalty = dens2 if soft_bg_den_t is None else dens2 + soft_bg_den_t
+                    dens2_flat = dens2_penalty.view(-1)
                     den_loss2 = torch.logsumexp(dens2_flat / tau_den_h, 0) * tau_den_h / top_k_den_h
 
                     loss2 = wl_loss2 + lam_den_boost * den_loss2
@@ -2617,7 +2782,8 @@ class Placer:
                             torch.nn.functional.pad(
                                 dens_af.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                             _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-                    den_af = torch.logsumexp(dens_af.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
+                    dens_af_pen = dens_af if soft_bg_den_t is None else dens_af + soft_bg_den_t
+                    den_af = torch.logsumexp(dens_af_pen.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
                     cost_after = float(wl_af + lam_den_end * den_af)
                     if cost_after > cost_before:
                         x_param.data = x_param_snapshot  # revert
@@ -2924,7 +3090,8 @@ class Placer:
 
     def _gradient_phase_soft(self, pos, soft_movable_idx, sizes_np, port_pos,
                               canvas_w, canvas_h, num_hard,
-                              safe_nnp, nnmask, grid_rows, grid_cols, hpwl_norm, deadline):
+                              safe_nnp, nnmask, grid_rows, grid_cols, hpwl_norm, deadline,
+                              cong_weight=0.0, fast_eng=None):
         """Optimize soft macro positions with WL + density(all macros) gradient.
 
         Hard macros are fixed at their current positions. Soft macros spread
@@ -2986,6 +3153,48 @@ class Placer:
         step = 0
         t_first = None
 
+        # ── Congestion-aware mode (gated on cong_weight > 0 for high-cong benchmarks) ──
+        _cong_ok = False
+        if cong_weight > 0.0 and fast_eng is not None:
+            try:
+                _gw_c = float(canvas_w) / grid_cols
+                _gh_c = float(canvas_h) / grid_rows
+                _h_cap_c = float(_gh_c * fast_eng['hpm'])
+                _v_cap_c = float(_gw_c * fast_eng['vpm'])
+                _n_pairs_c = len(fast_eng['src'])
+                _mem_ok = (_n_pairs_c * max(grid_rows, grid_cols) <
+                           (50_000_000 if dev.type == 'cuda' else 2_000_000))
+                if _h_cap_c > 1e-9 and _v_cap_c > 1e-9 and _mem_ok:
+                    _h_cap_ct = torch.tensor(_h_cap_c, device=dev)
+                    _v_cap_ct = torch.tensor(_v_cap_c, device=dev)
+                    _halloc_c = float(fast_eng.get('halloc', 0.5))
+                    _valloc_c = float(fast_eng.get('valloc', 0.5))
+                    _src_cct = torch.from_numpy(fast_eng['src'].astype(np.int64)).to(dev)
+                    _snk_cct = torch.from_numpy(fast_eng['snk'].astype(np.int64)).to(dev)
+                    _w_cct = torch.from_numpy(fast_eng['w'].astype(np.float32)).to(dev)
+                    _r_idx_c = torch.arange(grid_rows, dtype=torch.float32, device=dev) + 0.5
+                    _c_idx_c = torch.arange(grid_cols, dtype=torch.float32, device=dev) + 0.5
+                    _cx_edges = torch.arange(grid_cols + 1, dtype=torch.float32, device=dev) * _gw_c
+                    _cy_edges = torch.arange(grid_rows + 1, dtype=torch.float32, device=dev) * _gh_c
+                    # Static hard macro blockage (hard positions fixed during soft opt)
+                    with torch.no_grad():
+                        _mx_h = pos_ref[:num_hard, 0]; _my_h = pos_ref[:num_hard, 1]
+                        _hw_h = sizes_all_t[:num_hard, 0] / 2; _hh_h = sizes_all_t[:num_hard, 1] / 2
+                        _x_ov_h = torch.clamp(
+                            torch.minimum((_mx_h + _hw_h).unsqueeze(1), _cx_edges[1:].unsqueeze(0)) -
+                            torch.maximum((_mx_h - _hw_h).unsqueeze(1), _cx_edges[:-1].unsqueeze(0)), min=0.0)
+                        _y_ov_h = torch.clamp(
+                            torch.minimum((_my_h + _hh_h).unsqueeze(1), _cy_edges[1:].unsqueeze(0)) -
+                            torch.maximum((_my_h - _hh_h).unsqueeze(1), _cy_edges[:-1].unsqueeze(0)), min=0.0)
+                        _static_cong = (
+                            torch.einsum('ic,ir->rc', _x_ov_h, _y_ov_h / _gw_c) * (_valloc_c / _v_cap_ct) +
+                            torch.einsum('ic,ir->rc', _x_ov_h / _gh_c, _y_ov_h) * (_halloc_c / _h_cap_ct)
+                        ).detach()
+                    _cong_matmul = (_n_pairs_c * grid_rows > 50_000)
+                    _cong_ok = True
+            except Exception:
+                pass
+
         while time.time() < deadline:
             t_s = time.time()
             frac = min(1.0, (t_s - t_start) / t_total)
@@ -3019,7 +3228,50 @@ class Placer:
             dens_flat = density.view(-1)
             den_loss = torch.logsumexp(dens_flat / tau_den, dim=0) * tau_den / top_k_den
 
-            loss = wl_loss + lam_den * den_loss
+            if _cong_ok:
+                _al_c = 6.0
+                _xs_c = pos_cur[_src_cct, 0]; _ys_c = pos_cur[_src_cct, 1]
+                _xt_c = pos_cur[_snk_cct, 0]; _yt_c = pos_cur[_snk_cct, 1]
+                _row_w_H = torch.clamp(1.0 - ((_ys_c / _gh_c).unsqueeze(1) - _r_idx_c).abs(), min=0.0)
+                _c_lo_c = torch.minimum(_xs_c, _xt_c) / _gw_c
+                _c_hi_c = torch.maximum(_xs_c, _xt_c) / _gw_c
+                _col_H_c = (torch.sigmoid(_al_c * (_c_idx_c - _c_lo_c.unsqueeze(1))) *
+                            torch.sigmoid(_al_c * (_c_hi_c.unsqueeze(1) - _c_idx_c)))
+                if _cong_matmul:
+                    _H_net = ((_w_cct.unsqueeze(1) * _row_w_H).T @ _col_H_c) / _h_cap_ct
+                else:
+                    _H_net = torch.einsum('p,pr,pc->rc', _w_cct, _row_w_H, _col_H_c) / _h_cap_ct
+                _col_w_V = torch.clamp(1.0 - ((_xt_c / _gw_c).unsqueeze(1) - _c_idx_c).abs(), min=0.0)
+                _r_lo_c = torch.minimum(_ys_c, _yt_c) / _gh_c
+                _r_hi_c = torch.maximum(_ys_c, _yt_c) / _gh_c
+                _row_V_c = (torch.sigmoid(_al_c * (_r_idx_c - _r_lo_c.unsqueeze(1))) *
+                            torch.sigmoid(_al_c * (_r_hi_c.unsqueeze(1) - _r_idx_c)))
+                if _cong_matmul:
+                    _V_net = ((_w_cct.unsqueeze(1) * _row_V_c).T @ _col_w_V) / _v_cap_ct
+                else:
+                    _V_net = torch.einsum('p,pr,pc->rc', _w_cct, _row_V_c, _col_w_V) / _v_cap_ct
+                # Soft macro blockage (dynamic: gradients flow through soft positions)
+                _mx_s = pos_cur[num_hard:n_total_macros, 0]
+                _my_s = pos_cur[num_hard:n_total_macros, 1]
+                _x_ov_s = torch.clamp(
+                    torch.minimum((_mx_s + sizes_all_t[num_hard:, 0] / 2).unsqueeze(1),
+                                  _cx_edges[1:].unsqueeze(0)) -
+                    torch.maximum((_mx_s - sizes_all_t[num_hard:, 0] / 2).unsqueeze(1),
+                                  _cx_edges[:-1].unsqueeze(0)), min=0.0)
+                _y_ov_s = torch.clamp(
+                    torch.minimum((_my_s + sizes_all_t[num_hard:, 1] / 2).unsqueeze(1),
+                                  _cy_edges[1:].unsqueeze(0)) -
+                    torch.maximum((_my_s - sizes_all_t[num_hard:, 1] / 2).unsqueeze(1),
+                                  _cy_edges[:-1].unsqueeze(0)), min=0.0)
+                _cong_all = (_static_cong + _H_net + _V_net +
+                             torch.einsum('ic,ir->rc', _x_ov_s, _y_ov_s / _gw_c) * (_valloc_c / _v_cap_ct) +
+                             torch.einsum('ic,ir->rc', _x_ov_s / _gh_c, _y_ov_s) * (_halloc_c / _h_cap_ct))
+                _exc_c = torch.clamp(_cong_all - 1.0, min=0.0)
+                _top_k_c = max(1, int(_exc_c.numel() * 0.05))
+                _cong_loss_sr = torch.logsumexp(_exc_c.view(-1) / 0.5, 0) * 0.5 / _top_k_c
+                loss = wl_loss + lam_den * den_loss + cong_weight * _cong_loss_sr
+            else:
+                loss = wl_loss + lam_den * den_loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
