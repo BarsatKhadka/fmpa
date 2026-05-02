@@ -3109,7 +3109,7 @@ class Placer:
             ky  = torch.clamp(1.0 - dy.abs() / hh_den.unsqueeze(1), min=0.0)
             density  = torch.einsum('ic,ir->rc', kx, ky) / (cell_w * cell_h)
             # ABU top-10% density via logsumexp — directly matches oracle density metric
-            dens_flat = density.view(-1)
+            dens_flat = density.reshape(-1)
             den_loss = torch.logsumexp(dens_flat / tau_den, dim=0) * tau_den / top_k_den
 
             if _cong_ok:
@@ -3152,7 +3152,7 @@ class Placer:
                              torch.einsum('ic,ir->rc', _x_ov_s / _gh_c, _y_ov_s) * (_halloc_c / _h_cap_ct))
                 _exc_c = torch.clamp(_cong_all - 1.0, min=0.0)
                 _top_k_c = max(1, int(_exc_c.numel() * 0.05))
-                _cong_loss_sr = torch.logsumexp(_exc_c.view(-1) / 0.5, 0) * 0.5 / _top_k_c
+                _cong_loss_sr = torch.logsumexp(_exc_c.reshape(-1) / 0.5, 0) * 0.5 / _top_k_c
                 loss = wl_loss + lam_den * den_loss + cong_weight * _cong_loss_sr
             else:
                 loss = wl_loss + lam_den * den_loss
