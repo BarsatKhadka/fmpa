@@ -712,6 +712,7 @@ class Placer:
 
         # ── Phase 1: Cheap SA warm-up (30%–37% of budget) ────────────────────
         # Fast WL+density SA from gradient result; diversify with perturbed start.
+        print(f"[PH1_START] t={time.time()-t0:.1f}s best_cheap={best_cheap_cost:.4f}", flush=True)
         sa_end = t0 + (TIME_BUDGET - 30) * 0.37
 
         islands = []
@@ -747,6 +748,7 @@ class Placer:
         # ── Phase 1b: Parallel SA (37%→50% of budget) ────────────────────────
         # GPU path: K=32 parallel tempering chains with batched surrogate cost.
         # CPU path: sequential fast congestion SA.
+        print(f"[PH1B_START] t={time.time()-t0:.1f}s best_cheap={best_cheap_cost:.4f}", flush=True)
         cong_sa_end = t0 + (TIME_BUDGET - 30) * 0.50
         n_pairs_eng = len(fast_eng['src']) if fast_eng is not None else 0
         if time.time() < cong_sa_end - 3:
@@ -2346,6 +2348,8 @@ class Placer:
 
         step = 0
         t_first = None
+        _grad_loss_ema = None  # exponential moving average of loss for plateau detection
+        _grad_plateau_steps = 0
 
         while time.time() < deadline:
             t_s  = time.time()
@@ -2526,6 +2530,22 @@ class Placer:
             if t_first is None:
                 t_first = time.time() - t_s
                 if t_first > 10.0:
+                    break
+
+            # Plateau exit: stop gradient when loss EMA has not improved meaningfully.
+            # Only after 40% of time to avoid premature exit during warm-up phase.
+            _loss_val = float(loss.detach())
+            if _grad_loss_ema is None:
+                _grad_loss_ema = _loss_val
+            else:
+                _grad_loss_ema = 0.99 * _grad_loss_ema + 0.01 * _loss_val
+            if step % 50 == 49 and frac > 0.40:
+                _rel_imp = (_grad_loss_ema - _loss_val) / (abs(_grad_loss_ema) + 1e-8)
+                if _rel_imp < 5e-5:
+                    _grad_plateau_steps += 50
+                else:
+                    _grad_plateau_steps = 0
+                if _grad_plateau_steps >= 300:
                     break
 
         # ── Density overflow pass (ePlace-style Lagrangian update) ───────────
@@ -4137,15 +4157,15 @@ class Placer:
                 col_lo = torch.minimum(sc_k, kc_k); col_hi = torch.maximum(sc_k, kc_k)
                 row_lo = torch.minimum(sr_k, kr_k); row_hi = torch.maximum(sr_k, kr_k)
                 # H routing
-                lin_lo_H = K_range * H_stride + sr_k * (grid_cols + 1) + col_lo
-                lin_hi_H = K_range * H_stride + sr_k * (grid_cols + 1) + col_hi
+                lin_lo_H = (K_range * H_stride + sr_k * (grid_cols + 1) + col_lo).clamp(0, K * H_stride - 1)
+                lin_hi_H = (K_range * H_stride + sr_k * (grid_cols + 1) + col_hi).clamp(0, K * H_stride - 1)
                 H_flat = torch.zeros(K * H_stride, device=dev)
                 H_flat.scatter_add_(0, lin_lo_H.reshape(-1), w_rep.reshape(-1))
                 H_flat.scatter_add_(0, lin_hi_H.reshape(-1), -w_rep.reshape(-1))
                 H = H_flat.view(K, grid_rows, grid_cols + 1)[:, :, :-1].cumsum(2) / h_cap
                 # V routing
-                lin_lo_V = K_range * V_stride + row_lo * grid_cols + kc_k
-                lin_hi_V = K_range * V_stride + row_hi * grid_cols + kc_k
+                lin_lo_V = (K_range * V_stride + row_lo * grid_cols + kc_k).clamp(0, K * V_stride - 1)
+                lin_hi_V = (K_range * V_stride + row_hi * grid_cols + kc_k).clamp(0, K * V_stride - 1)
                 V_flat = torch.zeros(K * V_stride, device=dev)
                 V_flat.scatter_add_(0, lin_lo_V.reshape(-1), w_rep.reshape(-1))
                 V_flat.scatter_add_(0, lin_hi_V.reshape(-1), -w_rep.reshape(-1))
@@ -4167,6 +4187,9 @@ class Placer:
         t_start = time.time()
 
         step = 0
+        _sa_best_at_step = best_cost
+        _sa_stagnation = 0
+        _sa_stagnation_limit = max(2000, n_mov * 20)  # scale with problem size
         while time.time() < deadline - 0.5:
             frac = min(1.0, (time.time() - t_start) / max(1.0, deadline - 0.5 - t_start))
             s = step_scale * max(0.05, 1.0 - frac * 0.85)
@@ -4210,6 +4233,16 @@ class Placer:
                     if torch.rand(1, device=dev).log() < swap_log.clamp(max=0.0):
                         x_cur[[i, i+1]]    = x_cur[[i+1, i]].clone()
                         cost_cur[[i, i+1]] = cost_cur[[i+1, i]].clone()
+
+            # Convergence exit: stop when best has not improved for a long stretch
+            if step % 500 == 499:
+                if best_cost < _sa_best_at_step - 1e-5:
+                    _sa_best_at_step = best_cost
+                    _sa_stagnation = 0
+                else:
+                    _sa_stagnation += 500
+                if _sa_stagnation >= _sa_stagnation_limit and frac > 0.4:
+                    break
 
             step += 1
 
