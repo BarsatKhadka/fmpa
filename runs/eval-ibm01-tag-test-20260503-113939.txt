@@ -1,0 +1,32 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm01... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm01\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[BISECT] den=1.0067 ov=0.6069
+[BISECT] skipped: den too high (1.0067)
+[CPLACE] wl=0.1203 den=0.9983 cong=3.8302 ov=0.0000 proxy=2.5346 t=0.5s
+[PHASE0_DONE] t=66.5s best=1.9284 top5=[('init.plc', np.float64(1.9284)), ('cplace', np.float64(2.5346)), ('ml-k25', np.float64(2270.9606)), ('spec-0_1', np.float64(2290.993)), ('ml-k40', np.float64(2319.1807))]
+[PH1_START] t=105.2s best_cheap=1.9284
+[PH1_EXIT] t=105.3s no_improve=0 delta=0.1146 best=1.8138
+[PH1B_START] t=105.3s best_cheap=1.8138
+[SA_STAGNATION_EXIT] step=8499 frac=0.42 best=5.0158
+[PH1B_EXIT] t=132.6s delta=0.0000 best=1.8138
+[CPLACE] oracle: proxy=1.5542  den=1.112  cong=1.790
+[DIAG] pre-SA oracle: proxy=1.0385  den=0.812  cong=1.137
+[PH2_ENTER] oracle_is_fast=True oracle_call_secs=1.0
+[SOFT_PRE] oracle: 0.9677
+[ORA_SA_SLOT 0] cost=0.9677 best=0.9677 t=253s
+[SOFT_REOPT] den_only oracle: 0.9679  (prev: 0.9677)
+proxy=0.9677  (wl=0.066 den=0.608 cong=1.194)  VALID  [281.05s]

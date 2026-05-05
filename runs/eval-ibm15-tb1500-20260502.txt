@@ -1,0 +1,37 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm15... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm15\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 57, Row: 38
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm15/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 57, Row: 38
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[BISECT] den=1.0000 ov=0.0594
+[BISECT] skipped: den too high (1.0000)
+[CPLACE] wl=0.1097 den=1.0000 cong=4.4578 ov=0.0000 proxy=2.8387 t=6.0s
+[SCALE] s=1.05 wl=0.0777 den=1.0038 cong=3.0897 ov=3.6415 proxy=730.4216
+[SCALE] s=1.10 wl=0.0785 den=1.0050 cong=3.1058 ov=3.6160 proxy=725.3427
+[SCALE] s=1.15 wl=0.0794 den=1.0023 cong=3.0841 ov=1.6934 proxy=340.8065
+[SCALE] s=1.20 wl=0.0802 den=1.0057 cong=3.1237 ov=3.3580 proxy=673.7390
+[SCALE] s=1.30 wl=0.0817 den=1.0037 cong=3.0600 ov=2.8471 proxy=571.5427
+[CPLACE] oracle: proxy=1.9905  den=1.166  cong=2.662
+[DIAG] pre-SA oracle: proxy=1.6033  den=0.930  cong=2.160
+[PH2_ENTER] oracle_is_fast=True oracle_call_secs=53.9
+[GRAD2] oracle: 1.6043  (pre-SA best: 1.6033)
+[SOFT_BG] n_soft=1138, soft_util=0.533, soft_max_den=1.315
+[SOFT_BG_SEED] tgt=0.85 oracle: 1.6683
+[SOFT_BG] n_soft=1138, soft_util=0.533, soft_max_den=1.315
+[SOFT_BG_SEED] tgt=0.7 oracle: 1.6582
+[GRAD_HC] lc=5.0 oracle: 1.7794
+[GRAD_HC] lc=8.0 oracle: 1.8177
+[SOFT_PRE] skipped: high cong (2.16 > 2.0), saving 28s for oracle SA
+[SOFT_REOPT] cong_w=2 oracle: 1.4950  (prev: 1.6028)
+proxy=1.4950  (wl=0.058 den=0.717 cong=2.158)  VALID  [1427.76s]

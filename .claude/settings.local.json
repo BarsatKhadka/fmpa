@@ -9,7 +9,10 @@
       "Bash(echo \"exit: $?\")",
       "Bash(*)",
       "Bash(echo \"Pull PID: $!\")",
-      "PowerShell(Get-Process *)"
+      "PowerShell(Get-Process *)",
+      "PowerShell(docker info *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(git *)"
     ]
   }
 }

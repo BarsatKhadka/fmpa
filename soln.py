@@ -23,15 +23,7 @@ import torch
 from macro_place.benchmark import Benchmark
 
 OVERLAP_WEIGHT  = 200.0
-N_ISLANDS       = 2           # fewer islands; most budget goes to oracle SA
-REPAIR_STEPS    = 200
 TIME_BUDGET     = int(os.environ.get("PLACE_TIME_BUDGET", 3300))
-
-# Cheap SA params (warm-up phase)
-T_SA_START  = 0.04
-T_SA_END    = 0.001
-MAX_STEP    = 0.4
-SWAP_PROB   = 0.15
 
 # Oracle SA params
 T_ORC_START = 0.08   # proxy_cost units; at this T, exp(-0.02/0.08)=78% accept for +0.02 worse
@@ -56,17 +48,17 @@ class Placer:
         fixed_np  = benchmark.macro_fixed.numpy()
 
         movable_mask = benchmark.get_movable_mask() & benchmark.get_hard_macro_mask()
-        movable_idx  = torch.where(movable_mask)[0].tolist()
+        movable_idx  = torch.where(movable_mask)[0].tolist() 
         soft_movable_idx = torch.where(
             benchmark.get_movable_mask() & benchmark.get_soft_macro_mask()
-        )[0].tolist()  # movable soft macros for density-aware placement
+        )[0].tolist()  # movable soft macros for density-aware placement 
 
         nets_np = [n.numpy() for n in benchmark.net_nodes]
         macro_to_nets: dict[int, list[int]] = {}
         for ni, nodes in enumerate(nets_np):
             for node in nodes:
                 if int(node) < num_hard:
-                    macro_to_nets.setdefault(int(node), []).append(ni)
+                    macro_to_nets.setdefault(int(node), []).append(ni) 
 
         hpwl_norm = max(1.0, len(nets_np) * (canvas_w + canvas_h))
 
@@ -124,20 +116,6 @@ class Placer:
             wl, den, cong, ov = cheap_components(p)
             return wl + 0.5 * den + 0.5 * cong + OVERLAP_WEIGHT * ov
 
-        # ── Per-benchmark adaptive optimizer state ───────────────────────────
-        # probe_log: list of dicts {ld, lc, wl, den, cong, proxy} from every
-        # gradient output. Used to fit a per-benchmark surrogate proxy(ld, lc),
-        # whose argmin gives the right hyperparameters for the heavy Phase-2
-        # gradient. This is the "weight-space learning" approach: instead of
-        # one fixed schedule across all 17 benchmarks, learn what (ld, lc)
-        # works for THIS netlist's particular topology.
-        probe_log: list = []
-
-        # Persistent per-benchmark hyperparameter cache.
-        bench_name = getattr(benchmark, 'name', 'unknown')
-        bench_fingerprint = f"{bench_name}_n{len(movable_idx)}_g{grid_rows}x{grid_cols}"
-        cached_hparams = self._load_hparam_cache(bench_fingerprint)
-
         # ── Phase 0: Multi-world topology sweep (30% of budget) ─────────────────
         # "Multiple worlds": each gradient start uses a different λ_den (density–WL
         # balance), creating topologically distinct force models from the same random
@@ -161,57 +139,22 @@ class Placer:
         _world_lam_dens = [0.05, 0.20, 0.60, 1.50, 0.10, 0.40, 1.00, 2.00,
                            0.08, 0.30, 0.80, 0.15, 0.50, 1.20, 3.00, 4.00]
 
-        # Precompute Laplacian eigenvectors for spectral starts.
-        # Spectral starts place connected macros near each other → gradient has far
-        # less "mess" to undo, converging to better solutions in the same time budget.
-        # Time-guarded: if Laplacian build takes >12s, skip (very large benchmarks).
-        _spec_modes = None
-        _t_spec0 = time.time()
-        try:
-            from scipy.sparse import csr_matrix as _csr
-            from scipy.sparse.linalg import eigsh as _eigsh
-            _idx_map_s = {idx: k for k, idx in enumerate(movable_idx)}
-            _rs, _cs, _vs = [], [], []
-            for _ni, _nodes in enumerate(nets_np):
-                if time.time() - _t_spec0 > 10: break
-                _hs = [_idx_map_s[int(v)] for v in _nodes if _idx_map_s.get(int(v)) is not None]
-                if len(_hs) < 2: continue
-                _ew = (float(net_weights_np[_ni]) if _ni < len(net_weights_np) else 1.0) / max(1, len(_hs) - 1)
-                for _i in range(len(_hs)):
-                    for _j in range(_i + 1, len(_hs)):
-                        _rs += [_hs[_i], _hs[_j], _hs[_i], _hs[_j]]
-                        _cs += [_hs[_j], _hs[_i], _hs[_i], _hs[_j]]
-                        _vs += [-_ew, -_ew, _ew, _ew]
-            if _rs and time.time() - _t_spec0 < 11:
-                _Ls = _csr((_vs, (_rs, _cs)), shape=(len(movable_idx), len(movable_idx)))
-                _nm = min(8, len(movable_idx) - 1)
-                _, _vecs_s = _eigsh(_Ls, k=_nm + 1, which='SM', tol=1e-3, maxiter=1000)
-                if time.time() - _t_spec0 < 14:
-                    _spec_modes = [np.real(_vecs_s[:, i]) / (np.std(np.real(_vecs_s[:, i])) + 1e-9)
-                                   for i in range(1, _nm + 1)]
-        except Exception:
-            _spec_modes = None
-
-        # Mode pairs cycling through orthogonal spectral frames
-        _spec_pairs  = [(0,1),(1,2),(0,2),(2,3),(1,3),(0,3),(3,4),(4,5),
-                        (5,6),(6,7),(0,4),(1,5),(2,6),(3,7),(4,6),(5,7)]
-        _spec_noises = [0.08, 0.15, 0.10, 0.20, 0.12, 0.18, 0.06, 0.14,
-                        0.16, 0.09, 0.13, 0.17, 0.11, 0.07, 0.19, 0.08]
-        _spec_ptr    = 0
-
         topology_seeds: list = []
         topology_costs: list = []
+        topology_tags:  list = []
 
         # Include initial.plc as baseline seed
         _p_init_r = self._resolve(pos_init.copy(), num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
         topology_seeds.append(_p_init_r)
         topology_costs.append(cheap_cost(_p_init_r))
+        topology_tags.append('init.plc')
 
         # B2B quadratic analytical seeds: produce topologically distinct
         # WL-optimal starts independent of initial.plc's basin. These will be
         # injected as gradient-phase starting points (NOT compared raw — the
         # raw B2B output has high density before gradient spreads it).
         _b2b_pool: list = []
+        _b2b_tags: list = []
         _t_b2b0 = time.time()
         try:
             _b2b_budget = min(25.0, max(5.0, len(movable_idx) * 0.05))
@@ -240,79 +183,11 @@ class Placer:
                 )
                 _p_b2b = self._resolve(_p_b2b, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
                 _b2b_pool.append(_p_b2b)
+                _b2b_tags.append(f'b2b-{_bi}-{_am}-{_im}')
         except Exception:
             _b2b_pool = []
+            _b2b_tags = []
 
-        # Multi-level (V-cycle) seeds: cluster→coarse-place→uncoarsen.
-        # Different K_clusters values give different topology granularities.
-        # Each call internally tries n_restarts coarse placements and keeps best.
-        _t_ml0 = time.time()
-        try:
-            _ml_budget = min(20.0, max(4.0, len(movable_idx) * 0.04))
-            _ml_configs = [(15, 8), (25, 6), (40, 4)]
-            for _ki, (_nk, _nr) in enumerate(_ml_configs):
-                if time.time() - _t_ml0 > _ml_budget:
-                    break
-                if _nk * 2 > len(movable_idx):
-                    continue
-                _p_ml = self._multilevel_seed(
-                    pos_init, movable_idx, num_hard, nets_np, net_weights_np,
-                    port_pos, sizes_np, canvas_w, canvas_h, fixed_np,
-                    n_clusters=_nk, n_restarts=_nr, spec_modes=_spec_modes,
-                )
-                _p_ml = self._resolve(_p_ml, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                _b2b_pool.append(_p_ml)
-        except Exception:
-            pass
-
-        # ── Bisection → best_spread_pos for oracle direct evaluation ──────────────
-        # Spectral recursive bisection gives den≈0.60 for ibm17 (vs gradient's 0.945).
-        # We don't run anchor-gradient (complex, eats Phase 0 budget). Instead, we
-        # record the clean bisection result as best_spread_pos so Phase 2 can oracle-
-        # evaluate it directly when oracle_is_fast=True (e.g. ibm17 at 3300s budget).
-        # The oracle explores the spread basin from this low-density starting point.
-        _bisect_raw = None  # clean bisection position for oracle direct evaluation
-        if _spec_modes is not None and len(_spec_modes) >= 2 and len(movable_idx) >= 2:
-            try:
-                _spec_xy = np.zeros((num_hard, 2))
-                for _k, _midx in enumerate(movable_idx):
-                    _spec_xy[_midx, 0] = float(_spec_modes[0][_k]) if _k < len(_spec_modes[0]) else 0.0
-                    _spec_xy[_midx, 1] = float(_spec_modes[1][_k]) if _k < len(_spec_modes[1]) else 0.0
-                for _ax in range(2):
-                    _vals = _spec_xy[movable_idx, _ax]
-                    _lo, _hi = float(_vals.min()), float(_vals.max())
-                    _spec_xy[movable_idx, _ax] = (_vals - _lo) / (_hi - _lo) if _hi - _lo > 1e-6 else 0.5
-                _hard_areas_b = np.array([sizes_np[i, 0] * sizes_np[i, 1] for i in range(num_hard)])
-                _p_bisect = pos_init.copy()
-
-                def _rec_bis(inds, ax, rect):
-                    lx, ly, ux, uy = rect
-                    if len(inds) == 0: return
-                    if len(inds) == 1:
-                        idx = int(inds[0]); w, h = sizes_np[idx, 0], sizes_np[idx, 1]
-                        _p_bisect[idx] = [np.clip((lx+ux)*0.5, w/2, canvas_w-w/2),
-                                          np.clip((ly+uy)*0.5, h/2, canvas_h-h/2)]
-                        return
-                    _ord = inds[np.argsort(_spec_xy[inds, ax], kind='mergesort')]
-                    _cum = np.cumsum(_hard_areas_b[_ord]); _tot = float(_cum[-1])
-                    _sp = max(1, min(int(np.searchsorted(_cum, _tot*0.5)+1), len(_ord)-1))
-                    _lr = float(np.clip(_hard_areas_b[_ord[:_sp]].sum()/max(_tot,1e-6), 0.20, 0.80))
-                    _mid = (lx + (ux-lx)*_lr) if ax == 0 else (ly + (uy-ly)*_lr)
-                    if ax == 0:
-                        _rec_bis(_ord[:_sp], 1, (lx, ly, _mid, uy)); _rec_bis(_ord[_sp:], 1, (_mid, ly, ux, uy))
-                    else:
-                        _rec_bis(_ord[:_sp], 0, (lx, ly, ux, _mid)); _rec_bis(_ord[_sp:], 0, (lx, _mid, ux, uy))
-
-                _rec_bis(np.array(movable_idx, dtype=np.int64), 0, (0.0, 0.0, canvas_w, canvas_h))
-                _p_bisect = self._resolve(_p_bisect, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                _wl_b, _de_b, _co_b, _ov_b = cheap_components(_p_bisect)
-                print(f"[BISECT] den={_de_b:.4f} ov={_ov_b:.4f}", flush=True)
-                if _de_b < 0.85 and _ov_b < 1e-3:
-                    _bisect_raw = _p_bisect.copy()
-                else:
-                    print(f"[BISECT] skipped: den too high ({_de_b:.4f})", flush=True)
-            except Exception as _bis_e:
-                print(f"[BISECT] failed: {_bis_e}", flush=True)
 
         # GPU-batched multi-world sweep: run N_PAR gradient starts simultaneously.
         # On GPU: true batched execution (all N in one forward/backward pass) → N_PAR× more
@@ -322,7 +197,6 @@ class Placer:
                     if _use_gpu_par else 0.0)
         # Scale N_PAR and SA chains with available VRAM (8GB→16, 16GB→32, 48GB→64).
         _n_par = (64 if _vram_gb > 40 else 32 if _vram_gb > 16 else 16) if _use_gpu_par else 1
-        _K_sa  = (128 if _vram_gb > 40 else 64 if _vram_gb > 16 else 32) if _use_gpu_par else 32
         # Total starts scales with parallelism: same wall-time, N_PAR× more exploration
         _max_topo = n_topo * _n_par
 
@@ -335,7 +209,7 @@ class Placer:
                 break
 
             # Generate a batch of N_PAR initial positions (main thread, sequential)
-            _batch_p, _batch_lam = [], []
+            _batch_p, _batch_lam, _batch_tags = [], [], []
             for _bi in range(_n_par):
                 if _topo_done >= _max_topo:
                     break
@@ -345,41 +219,23 @@ class Placer:
                 # then get gradient-refined like any other start, giving them
                 # a fair chance to compete instead of being judged on raw cost.
                 _use_b2b = (_topo_done < len(_b2b_pool))
-                _use_spec = (not _use_b2b) and (_spec_modes is not None and _ti % 3 != 2)
                 if _use_b2b:
                     _p_new = _b2b_pool[_topo_done].copy()
+                    _btag = _b2b_tags[_topo_done] if _topo_done < len(_b2b_tags) else f'b2b-{_topo_done}'
                     _batch_p.append(_p_new)
                     _batch_lam.append(_world_lam_dens[_ti % len(_world_lam_dens)])
+                    _batch_tags.append(_btag)
                     _topo_done += 1
                     continue
                 _p_new = pos_init.copy()
-                if _use_spec:
-                    _mi, _mj = _spec_pairs[_spec_ptr % len(_spec_pairs)]
-                    _noise = _spec_noises[_spec_ptr % len(_spec_noises)]
-                    _spec_ptr += 1
-                    if _mi < len(_spec_modes) and _mj < len(_spec_modes):
-                        _p_new = self._spectral_sorted_placement(
-                            pos_init, movable_idx, sizes_np,
-                            _spec_modes[_mi], _spec_modes[_mj],
-                            num_hard, canvas_w, canvas_h, fixed_np)
-                        for _idx in movable_idx:
-                            _w2, _h2 = sizes_np[_idx, 0], sizes_np[_idx, 1]
-                            _p_new[_idx, 0] = float(np.clip(
-                                _p_new[_idx, 0] + np.random.normal(0, _noise * canvas_w),
-                                _w2 / 2, canvas_w - _w2 / 2))
-                            _p_new[_idx, 1] = float(np.clip(
-                                _p_new[_idx, 1] + np.random.normal(0, _noise * canvas_h),
-                                _h2 / 2, canvas_h - _h2 / 2))
-                    else:
-                        _use_spec = False
-                if not _use_spec:
-                    for _idx in movable_idx:
-                        _w2, _h2 = sizes_np[_idx, 0], sizes_np[_idx, 1]
-                        _p_new[_idx, 0] = float(np.random.uniform(_w2 / 2, canvas_w - _w2 / 2))
-                        _p_new[_idx, 1] = float(np.random.uniform(_h2 / 2, canvas_h - _h2 / 2))
+                for _idx in movable_idx:
+                    _w2, _h2 = sizes_np[_idx, 0], sizes_np[_idx, 1]
+                    _p_new[_idx, 0] = float(np.random.uniform(_w2 / 2, canvas_w - _w2 / 2))
+                    _p_new[_idx, 1] = float(np.random.uniform(_h2 / 2, canvas_h - _h2 / 2))
                 _p_new = self._resolve(_p_new, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
                 _batch_p.append(_p_new)
                 _batch_lam.append(_world_lam_dens[_ti % len(_world_lam_dens)])
+                _batch_tags.append('rand')
                 _topo_done += 1
 
             # Run batch gradient phases: parallel on GPU, sequential on CPU
@@ -439,408 +295,78 @@ class Placer:
 
             # Resolve and score in main thread; record probe data per output
             for _bi_out, _pg in enumerate(_grad_res):
-                _pg = self._resolve(_pg, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                _tag_out = _batch_tags[_bi_out] if _bi_out < len(_batch_tags) else 'unk'
+                # B2B seeds start from analytically collapsed positions; gradient pushes
+                # macros outward but leaves residual overlaps that _resolve (iteration-capped)
+                # cannot fully clean. Use _resolve_fully for B2B-seeded results so they
+                # compete fairly with init.plc and random seeds. Random/init seeds have
+                # much smaller post-gradient overlaps and need only fast _resolve.
+                if _tag_out.startswith('b2b'):
+                    _pg = self._resolve_fully(_pg, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                else:
+                    _pg = self._resolve(_pg, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
                 _wl, _de, _co, _ov = cheap_components(_pg)
                 _proxy = _wl + 0.5 * _de + 0.5 * _co + OVERLAP_WEIGHT * _ov
                 topology_seeds.append(_pg)
                 topology_costs.append(_proxy)
-                # Record probe: actual hyperparameters used and achieved metrics.
-                # Proxy stored WITHOUT overlap penalty — the surrogate models
-                # the metric we care about (wl + 0.5*den + 0.5*cong), and
-                # overlap is removed by Phase-2 resolve anyway. Including the
-                # 200× overlap term made the surrogate model overlap noise
-                # rather than the actual hparam→performance relationship.
-                _ld_used = float(_batch_lams[_bi_out]) if _bi_out < len(_batch_lams) else 0.4
-                _lc_used = _batch_lam_cong[_bi_out] if _bi_out < len(_batch_lam_cong) else None
-                if _lc_used is None:
-                    _lc_used = 0.30  # default lam_cong used inside _gradient_phase
-                _proxy_clean = float(_wl + 0.5 * _de + 0.5 * _co)
-                if np.isfinite(_proxy_clean) and _proxy_clean < 50.0:
-                    probe_log.append(dict(
-                        ld=_ld_used, lc=float(_lc_used),
-                        wl=float(_wl), den=float(_de), cong=float(_co),
-                        proxy=_proxy_clean,
-                    ))
+                topology_tags.append(_tag_out)
 
-        # Keep top-5 by cheap_cost, refine top-3 with remaining Phase 0 budget
+        # Keep top-5 by cheap_cost (scores may include overlap penalty from limited _resolve)
         _topo_rank     = sorted(range(len(topology_seeds)), key=lambda i: topology_costs[i])
         topology_seeds = [topology_seeds[i] for i in _topo_rank[:5]]
         topology_costs = [topology_costs[i] for i in _topo_rank[:5]]
+        topology_tags  = [topology_tags[i]  for i in _topo_rank[:5]]
 
-        _n_refine    = min(3, len(topology_seeds))
-        _refine_each = max(8.0, (grad_end_total - time.time() - 5) / max(1, _n_refine))
-        for _si in range(_n_refine):
-            if time.time() >= grad_end_total - 5:
-                break
-            _rend  = min(time.time() + _refine_each, grad_end_total - 3)
-            _p_ref = self._gradient_phase(
-                topology_seeds[_si], movable_idx, sizes_np, port_pos, canvas_w, canvas_h,
-                num_hard, grad_safe_nnp, grad_nnmask, grid_rows, grid_cols,
-                grad_hpwl_norm, _rend, fast_eng=fast_eng,
-            )
-            _p_ref = self._resolve(_p_ref, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-            _c_ref = cheap_cost(_p_ref)
-            topology_seeds[_si] = _p_ref
-            topology_costs[_si] = _c_ref
-
-        # Re-rank after refinement
-        _topo_rank     = sorted(range(len(topology_seeds)), key=lambda i: topology_costs[i])
-        topology_seeds = [topology_seeds[i] for i in _topo_rank]
-        topology_costs = [topology_costs[i] for i in _topo_rank]
-
-        # ── Constructive placement seeds ───────────────────────────────────────
-        # The gradient+_resolve always produces density=0.812 (confirmed diagnostic).
-        # Build positions from scratch with overlap checking and density constraint.
-        # This gives a fundamentally different starting basin for oracle SA.
-        # target_den=0.68 → slightly below RePlAce's 0.730 to ensure feasibility.
-        best_spread_pos  = None
-        best_spread_cost = float('inf')
-        try:
-            if len(movable_idx) > 450 and TIME_BUDGET < 700:
-                raise Exception("skipping CPLACE: large slow-oracle benchmark (oracle_is_fast=False)")
-            _t_cp = time.time()
-            _cp_pos = self._constructive_place(
-                movable_idx, sizes_np, num_hard, canvas_w, canvas_h,
-                fixed_np, port_pos, nets_np, net_weights_np,
-                grid_rows, grid_cols, init_pos=pos_init,
-            )
-            _wl, _de, _co, _ov = cheap_components(_cp_pos)
-            _pr = _wl + 0.5 * _de + 0.5 * _co + OVERLAP_WEIGHT * _ov
-            topology_seeds.append(_cp_pos)
-            topology_costs.append(_pr)
-            if _ov < 1e-3 and np.isfinite(_pr):
-                best_spread_cost = float(_de)
-                best_spread_pos  = _cp_pos.copy()
-            print(f"[CPLACE] wl={_wl:.4f} den={_de:.4f} cong={_co:.4f} "
-                  f"ov={_ov:.4f} proxy={_pr:.4f} t={time.time()-_t_cp:.1f}s", flush=True)
-        except Exception as _e:
-            print(f"[CPLACE] failed: {_e}", flush=True)
-
-        # ── Center-scaling spread seeds ────────────────────────────────────────
-        # Gradient+resolve always produces den=0.812 (oracle) because _resolve
-        # minimally pushes overlapping pairs together, clustering macros at WL centroids.
-        # Scaling all macro positions outward from their center-of-mass by factor s
-        # reduces density ≈ 1/s² while increasing WL ≈ s for macro-dominated nets.
-        # For port-dominated nets (most IBM), ports anchor bounding boxes → WL barely
-        # increases even for large s. Net oracle proxy: could drop below 1.0385.
-        # s=1.10: den≈0.812/1.21≈0.671, WL≈0.070 → proxy≈0.975 (better than RePlAce).
-        if topology_seeds and not (len(movable_idx) > 450 and TIME_BUDGET < 700):
-            _best_p0 = topology_seeds[0]
-            _cmx = float(np.mean([_best_p0[_i, 0] for _i in movable_idx]))
-            _cmy = float(np.mean([_best_p0[_i, 1] for _i in movable_idx]))
-            for _sv in [1.05, 1.10, 1.15, 1.20, 1.30]:
-                _p_scale = _best_p0.copy()
-                for _idx in movable_idx:
-                    _hw, _hh = sizes_np[_idx, 0] / 2, sizes_np[_idx, 1] / 2
-                    _p_scale[_idx, 0] = float(np.clip(
-                        _cmx + _sv * (_best_p0[_idx, 0] - _cmx),
-                        _hw, canvas_w - _hw))
-                    _p_scale[_idx, 1] = float(np.clip(
-                        _cmy + _sv * (_best_p0[_idx, 1] - _cmy),
-                        _hh, canvas_h - _hh))
-                _p_scale = self._resolve(_p_scale, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                _wl, _de, _co, _ov = cheap_components(_p_scale)
-                _pr = _wl + 0.5 * _de + 0.5 * _co + OVERLAP_WEIGHT * _ov
-                topology_seeds.append(_p_scale)
-                topology_costs.append(_pr)
-                print(f"[SCALE] s={_sv:.2f} wl={_wl:.4f} den={_de:.4f} cong={_co:.4f} "
-                      f"ov={_ov:.4f} proxy={_pr:.4f}", flush=True)
-                if _ov < 1e-3 and _de < best_spread_cost and np.isfinite(_pr):
-                    best_spread_cost = float(_de)
-                    best_spread_pos  = _p_scale.copy()
-
-        # Bisection raw → best_spread_pos: den≈0.60 is much lower than CPLACE/SCALE.
-        # Oracle-evaluated directly in Phase 2 when oracle_is_fast=True, giving the SA
-        # a spread-basin starting point instead of the collapsed-gradient basin.
-        if _bisect_raw is not None:
-            _wl_br, _de_br, _co_br, _ov_br = cheap_components(_bisect_raw)
-            if _ov_br < 1e-3 and _de_br < best_spread_cost:
-                best_spread_cost = float(_de_br)
-                best_spread_pos  = _bisect_raw.copy()
-
-        # Re-rank including spread seeds
-        _topo_rank     = sorted(range(len(topology_seeds)), key=lambda i: topology_costs[i])
-        topology_seeds = [topology_seeds[i] for i in _topo_rank]
-        topology_costs = [topology_costs[i] for i in _topo_rank]
+        # Post-pass: apply _resolve_fully to any top-5 seed with residual overlaps.
+        # The topo loop used fast _resolve (iteration-capped); gradient output can have
+        # residual overlaps that inflate the proxy by 200× per overlap unit. Fixing them
+        # here (outside the timing-sensitive gradient loop) costs ~1-5s per dirty seed
+        # but gives the correct proxy score for ranking and for Phase 1/2 starts.
+        for _ci in range(len(topology_seeds)):
+            _, _, _, _ov_ci = cheap_components(topology_seeds[_ci])
+            if _ov_ci > 1e-3:
+                topology_seeds[_ci] = self._resolve_fully(
+                    topology_seeds[_ci], num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                _wl_ci, _de_ci, _co_ci, _ov_ci = cheap_components(topology_seeds[_ci])
+                topology_costs[_ci] = _wl_ci + 0.5*_de_ci + 0.5*_co_ci + OVERLAP_WEIGHT*_ov_ci
+        _topo_rank2    = sorted(range(len(topology_seeds)), key=lambda i: topology_costs[i])
+        topology_seeds = [topology_seeds[i] for i in _topo_rank2]
+        topology_costs = [topology_costs[i] for i in _topo_rank2]
+        topology_tags  = [topology_tags[i]  for i in _topo_rank2]
 
         best_cheap_cost = topology_costs[0]
         best_cheap_pos  = topology_seeds[0].copy()
-        pos_grad        = best_cheap_pos.copy()
+        print(f"[PHASE0_DONE] t={time.time()-t0:.1f}s best={best_cheap_cost:.4f} "
+              f"top5={[(topology_tags[i], round(topology_costs[i],4)) for i in range(min(5,len(topology_costs)))]}", flush=True)
 
-        # ── Adaptive probe targeting: fit surrogate on Phase 0 probes, then
-        # run TARGETED extra probes near the surrogate's argmin to refine.
-        # Diagnostic-driven: if cong dominates → expand probes in high-lc region.
-        # ────────────────────────────────────────────────────────────────────
-        adaptive_ld, adaptive_lc = None, None
-        adaptive_diag = None
-        coeffs0, predict0 = self._fit_surrogate(probe_log)
-        if predict0 is not None:
-            ld_star, lc_star, _ = self._surrogate_argmin(predict0)
-            adaptive_diag = self._diagnose_probes(probe_log)
+        # ── Phase 1: Cheap SA warm-up (skipped — sa_end expires before Phase 1 starts at 300s) ──
+        hard_deadline = t0 + TIME_BUDGET - 10
+        print(f"[PH1_SKIP] t={time.time()-t0:.1f}s best_cheap={best_cheap_cost:.4f}", flush=True)
 
-            # Targeted probe: 3 short gradient runs around the surrogate argmin.
-            # This refines the surrogate where it predicts the minimum.
-            _adaptive_end = grad_end_total + 25  # small extra slot
-            _targeted = []
-            if adaptive_diag is not None:
-                # Sample 3 nearby points: argmin, ±20% perturbations
-                _targeted = [
-                    (max(0.05, ld_star * 0.85), max(0.01, lc_star * 0.85)),
-                    (ld_star, lc_star),
-                    (min(4.0, ld_star * 1.20), min(4.0, lc_star * 1.20)),
-                ]
-                # If cong dominates, push one probe to high lc region
-                if adaptive_diag['dominant_axis'] == 'cong':
-                    _targeted.append((max(0.5, ld_star), min(4.0, lc_star * 2.5 + 0.5)))
-                # If den dominates, push one probe to high ld
-                elif adaptive_diag['dominant_axis'] == 'den':
-                    _targeted.append((min(4.0, ld_star * 2.5 + 0.5), max(0.05, lc_star)))
-
-            _per_targeted = max(3.0, min(15.0, (_adaptive_end - time.time()) / max(1, len(_targeted))))
-            for _td_ld, _td_lc in _targeted:
-                if time.time() >= _adaptive_end - 2:
-                    break
-                _td_end = min(time.time() + _per_targeted, _adaptive_end - 1)
-                try:
-                    _td_p = self._gradient_phase(
-                        best_cheap_pos.copy(), movable_idx, sizes_np, port_pos,
-                        canvas_w, canvas_h, num_hard, grad_safe_nnp, grad_nnmask,
-                        grid_rows, grid_cols, grad_hpwl_norm, _td_end,
-                        fast_eng=fast_eng, lam_den_override=_td_ld,
-                        lam_cong_override=_td_lc, cong_start_frac=0.10,
-                    )
-                    _td_p = self._resolve(_td_p, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    _wl, _de, _co, _ov = cheap_components(_td_p)
-                    _pp_full = _wl + 0.5 * _de + 0.5 * _co + OVERLAP_WEIGHT * _ov
-                    _pp_clean = float(_wl + 0.5 * _de + 0.5 * _co)
-                    if np.isfinite(_pp_clean) and _pp_clean < 50.0:
-                        probe_log.append(dict(
-                            ld=float(_td_ld), lc=float(_td_lc),
-                            wl=float(_wl), den=float(_de),
-                            cong=float(_co), proxy=_pp_clean,
-                        ))
-                    if _pp_full < best_cheap_cost:
-                        best_cheap_cost = _pp_full
-                        best_cheap_pos  = _td_p.copy()
-                except Exception:
-                    continue
-
-            # Refit surrogate with augmented data
-            coeffs1, predict1 = self._fit_surrogate(probe_log)
-            if predict1 is not None:
-                ld2, lc2, _ = self._surrogate_argmin(predict1)
-                adaptive_ld, adaptive_lc = ld2, lc2
-            else:
-                adaptive_ld, adaptive_lc = ld_star, lc_star
-            adaptive_diag = self._diagnose_probes(probe_log)
-
-        # If cache has better hparams than what we just found, prefer those
-        if cached_hparams is not None and adaptive_ld is not None:
-            # Use cached only as a hint — add it as one extra probe candidate
-            pass  # cached values get applied in Phase 2 if our fit fails
-
-        # ── Phase 0b: Force-directed soft macro placement (CG solve) ─────────
-        # With hard macros fixed at gradient result, optimally place soft macros
-        # to minimize quadratic WL (Step C of the A-F pipeline).
-        # Runs in seconds; significantly improves WL contributed by soft macros.
-        if time.time() < grad_end_total + 30 and soft_movable_idx:
-            pos_grad_soft = self._force_directed_soft(
-                pos_grad, num_hard, nets_np, net_weights_np,
-                port_pos, canvas_w, canvas_h, sizes_np, fixed_np)
-            c_soft = cheap_cost(pos_grad_soft)
-            if c_soft < best_cheap_cost:
-                best_cheap_cost = c_soft
-                best_cheap_pos  = pos_grad_soft.copy()
-                pos_grad = pos_grad_soft.copy()
-
-        # ── Phase 0c: Hybro-WireMask escape (post-gradient perturbation) ────────
-        # After gradient converges, macros stuck in local minima show large net-
-        # centroid forces (gradient would move them if step were bigger). Move the
-        # top-30% most force-loaded macros 60% of the way toward their centroids,
-        # then run a short gradient pass. This can escape density-WL saddle points
-        # that single-macro gradient steps can't cross. (Hybro-WireMask, 2024.)
-        _hybro_time = min(grad_end_total + 35, t0 + (TIME_BUDGET - 30) * 0.38)
-        if time.time() < _hybro_time - 5 and len(movable_idx) > 0:
-            try:
-                _cur_all_h = self._all_pos(best_cheap_pos, port_pos)
-                # Net-centroid force for each movable macro (weighted avg of net peer positions)
-                _force_x = np.zeros(best_cheap_pos.shape[0])
-                _force_y = np.zeros(best_cheap_pos.shape[0])
-                for _ni_h, _nodes_h in enumerate(nets_np):
-                    _m_on_net = [int(_v) for _v in _nodes_h if int(_v) in set(movable_idx)]
-                    if not _m_on_net: continue
-                    _wt_h = net_weights_np[_ni_h] / max(1, len(_nodes_h))
-                    for _mi_h in _m_on_net:
-                        _cx_h = float(np.mean([_cur_all_h[int(_v), 0] for _v in _nodes_h if int(_v) != _mi_h]))
-                        _cy_h = float(np.mean([_cur_all_h[int(_v), 1] for _v in _nodes_h if int(_v) != _mi_h]))
-                        _force_x[_mi_h] += _wt_h * (_cx_h - best_cheap_pos[_mi_h, 0])
-                        _force_y[_mi_h] += _wt_h * (_cy_h - best_cheap_pos[_mi_h, 1])
-                # Sort movable macros by force magnitude (stuck = high force)
-                _force_mag = np.array([
-                    math.sqrt(_force_x[i]**2 + _force_y[i]**2) for i in movable_idx
-                ])
-                _k_hybro = max(1, int(len(movable_idx) * 0.30))
-                _stuck_local = np.argsort(_force_mag)[-_k_hybro:]
-                _stuck_idx = [movable_idx[k] for k in _stuck_local]
-                # Move stuck macros 60% toward their net centroid
-                _hybro_pos = best_cheap_pos.copy()
-                for _idx_h in _stuck_idx:
-                    _w_h, _h_h = sizes_np[_idx_h, 0], sizes_np[_idx_h, 1]
-                    _nx_h = float(np.clip(
-                        best_cheap_pos[_idx_h, 0] + 0.60 * _force_x[_idx_h],
-                        _w_h / 2, canvas_w - _w_h / 2))
-                    _ny_h = float(np.clip(
-                        best_cheap_pos[_idx_h, 1] + 0.60 * _force_y[_idx_h],
-                        _h_h / 2, canvas_h - _h_h / 2))
-                    _hybro_pos[_idx_h] = [_nx_h, _ny_h]
-                _hybro_pos = self._resolve(_hybro_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                # Short gradient re-convergence from escaped position
-                _hyb_end = min(_hybro_time, time.time() + 25)
-                _hybro_pos = self._gradient_phase(
-                    _hybro_pos, movable_idx, sizes_np, port_pos, canvas_w, canvas_h,
-                    num_hard, grad_safe_nnp, grad_nnmask, grid_rows, grid_cols,
-                    grad_hpwl_norm, _hyb_end, fast_eng=fast_eng,
-                )
-                _hybro_pos = self._resolve(_hybro_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                _c_hybro = cheap_cost(_hybro_pos)
-                if _c_hybro < best_cheap_cost:
-                    best_cheap_cost = _c_hybro
-                    best_cheap_pos  = _hybro_pos.copy()
-                    print(f"[HYBRO] improved: {_c_hybro:.4f}", flush=True)
-            except Exception:
-                pass  # hybro optional: never block main pipeline on error
-
-        # ── Phase 1: Cheap SA warm-up (30%–37% of budget) ────────────────────
-        # Fast WL+density SA from gradient result; diversify with perturbed start.
-        print(f"[PH1_START] t={time.time()-t0:.1f}s best_cheap={best_cheap_cost:.4f}", flush=True)
-        sa_end = t0 + (TIME_BUDGET - 30) * 0.37
-
-        islands = []
-        for i in range(N_ISLANDS):
-            p = self._perturb(pos_grad if i == 0 else pos_init, movable_idx, sizes_np, canvas_w, canvas_h,
-                              0.0 if i == 0 else 0.15)
-            p = self._resolve(p, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-            islands.append(p)
-
-        costs = [cheap_cost(p) for p in islands]
-        if float(min(costs)) < best_cheap_cost:
-            best_cheap_pos  = islands[int(np.argmin(costs))].copy()
-            best_cheap_cost = float(min(costs))
-
-        while time.time() < sa_end:
-            elapsed_frac = min(1.0, (time.time() - t0) / max(1.0, (TIME_BUDGET - 30) * 0.22))
-            T = T_SA_START * (T_SA_END / T_SA_START) ** elapsed_frac
-
-            for i in range(N_ISLANDS):
-                if time.time() >= sa_end: break
-                islands[i] = self._run_sa(
-                    islands[i], nets_np, macro_to_nets, movable_idx,
-                    sizes_np, port_pos, canvas_w, canvas_h,
-                    grid_rows, grid_cols, num_hard, T, 500, hpwl_norm,
-                    safe_nnp, nnmask,
-                )
-                islands[i] = self._resolve(islands[i], num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                c = cheap_cost(islands[i])
-                costs[i] = c
-                if c < best_cheap_cost:
-                    best_cheap_cost = c; best_cheap_pos = islands[i].copy()
-
-        # ── Phase 1b: Parallel SA (37%→50% of budget) ────────────────────────
-        # GPU path: K=32 parallel tempering chains with batched surrogate cost.
-        # CPU path: sequential fast congestion SA.
-        print(f"[PH1B_START] t={time.time()-t0:.1f}s best_cheap={best_cheap_cost:.4f}", flush=True)
-        cong_sa_end = t0 + (TIME_BUDGET - 30) * 0.50
-        n_pairs_eng = len(fast_eng['src']) if fast_eng is not None else 0
-        if time.time() < cong_sa_end - 3:
-            if _use_gpu_par:
-                # Multi-start Phase 1b: build a small set of distinct basins.
-                # Hypothesis (memory: 2026-04-28): every Phase-0 intervention has
-                # been null because Phase 1b/2 collapse to a single basin around
-                # best_cheap_pos. Distribute the K=32 chains across 3-4 distinct
-                # starts so the SA explores multiple basins in parallel.
-                p1b_starts = [best_cheap_pos.copy()]
-                try:
-                    for _seed in topology_seeds[1:4]:
-                        if _seed is not None:
-                            p1b_starts.append(np.asarray(_seed).copy())
-                except NameError:
-                    pass
-                # One large-perturbation start to inject geographical diversity.
-                try:
-                    _pert = self._perturb(
-                        best_cheap_pos, movable_idx, sizes_np,
-                        canvas_w, canvas_h, 0.40,
-                    )
-                    _pert = self._resolve(_pert, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    p1b_starts.append(_pert)
-                except Exception:
-                    pass
-                # Original .plc as one start — guards against pathological seeds.
-                p1b_starts.append(np.asarray(pos_init).copy())
-
-                # GPU parallel tempering: K chains across multi-start basins.
-                p1b = self._gpu_parallel_sa(
-                    best_cheap_pos.copy(), movable_idx, sizes_np, port_pos,
-                    canvas_w, canvas_h, num_hard, grad_safe_nnp, grad_nnmask,
-                    grid_rows, grid_cols, grad_hpwl_norm, cong_sa_end,
-                    fast_eng=fast_eng if n_pairs_eng < 500_000 else None,
-                    lam_den=0.5, lam_cong=0.5, K=_K_sa,
-                    pos_starts=p1b_starts,
-                )
-                p1b = self._resolve(p1b, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-            elif fast_eng is not None and n_pairs_eng < 1_000_000:
-                p1b = self._run_fast_sa_cong(
-                    best_cheap_pos.copy(), movable_idx, sizes_np, port_pos,
-                    canvas_w, canvas_h, num_hard, fixed_np, cheap_cost, cong_sa_end,
-                    fast_eng=fast_eng, grid_rows=grid_rows, grid_cols=grid_cols,
-                )
-            else:
-                p1b = best_cheap_pos.copy()
-            c1b = cheap_cost(p1b)
-            if c1b < best_cheap_cost:
-                best_cheap_cost = c1b
-                best_cheap_pos  = p1b.copy()
-
-        # ── Phase 2: Oracle SA + surrogate calibration (30%–90% of budget) ───────
-        # Outer loop: each iteration = oracle probe → calibrate surrogate → gradient → SA.
-        # Inner oracle SA: temperature-driven exploration with exact proxy.
-        hard_deadline  = t0 + TIME_BUDGET - 10
-        oracle_end     = min(hard_deadline - 5, t0 + (TIME_BUDGET - 30) * 0.90)
-        best_pos       = best_cheap_pos.copy()
-        oracle_is_fast = True   # updated after first oracle call
+        # ── Phase 2: Oracle SA + surrogate calibration ────────────────────────
+        # oracle_end is set dynamically after measuring oracle_call_secs so
+        # SOFT_REOPT always has budget: oracle_end = hard_deadline - (secs + 35).
+        oracle_end     = hard_deadline - 45  # preliminary; updated after oracle calibration
+        best_pos              = best_cheap_pos.copy()
+        _oracle_calls_possible = 0  # updated after oracle calibration
 
         if plc is not None:
-            # For very large benchmarks at short budgets: oracle call burns the budget.
-            # ibm17 (517 macros): oracle takes ~90s. At 300s that's 30% wasted.
-            # Skip oracle check when n_movable > 450 AND budget < 700s.
-            _est_oracle_secs = max(1.0, oracle_end - time.time()) * 0.12
-            _skip_oracle_check = (len(movable_idx) > 450 and TIME_BUDGET < 700)
-            if _skip_oracle_check:
-                init_r    = self._resolve_fully(pos_init, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                init_cost, init_comps = float('inf'), None
-                oracle_call_secs = _est_oracle_secs
-                oracle_is_fast = False
-            else:
-                # Evaluate pos_init as the reference baseline.
-                init_r    = self._resolve_fully(pos_init, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                t_oc0 = time.time()
-                init_cost, init_comps = self._true_cost(init_r, benchmark, plc, return_components=True)
-                oracle_call_secs = time.time() - t_oc0
-                # Dynamic check: oracle SA is viable only if we have time for ≥3 evaluations.
-                # Robust against system-load variance (e.g. ibm17 oracle can swing 90s→400s
-                # under load; a fixed multiplier like 0.04×TB=132s is fragile).
-                # Also enforce absolute minimum: oracle must be faster than 60% of budget.
-                _time_remaining_for_sa = oracle_end - time.time()
-                _min_oracle_sa_evals = 3
-                oracle_is_fast = (
-                    _time_remaining_for_sa > oracle_call_secs * _min_oracle_sa_evals
-                    and oracle_call_secs < TIME_BUDGET * 0.60
-                )
+            # Evaluate pos_init as the reference baseline and calibrate oracle call time.
+            init_r    = self._resolve_fully(pos_init, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+            t_oc0 = time.time()
+            init_cost, init_comps = self._true_cost(init_r, benchmark, plc, return_components=True)
+            oracle_call_secs = time.time() - t_oc0
+            # Reserve for: last SA slot's post-SA oracle call + SOFT_REOPT (gradient+oracle) + buffer.
+            oracle_end = min(hard_deadline - 5, hard_deadline - int(2 * oracle_call_secs + 35))
+            # oracle SA is viable when ≥3 calls fit in remaining budget.
+            _oracle_calls_possible = int(
+                max(0, oracle_end - time.time()) / max(1e-3, oracle_call_secs)
+            ) if oracle_call_secs < TIME_BUDGET * 0.60 else 0
 
             # Best of gradient result vs pos_init as primary start.
             starts = [init_r]
             starts_cost = [init_cost]
-            if oracle_is_fast:
+            if _oracle_calls_possible >= 3:
                 start_r_cheap = self._resolve_fully(best_cheap_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
                 sc_cheap, cheap_comps = self._true_cost(start_r_cheap, benchmark, plc, return_components=True)
             else:
@@ -853,332 +379,17 @@ class Placer:
             else:
                 ref_comps = init_comps
 
-            # Also evaluate the best CONSTRUCTIVE seed: overlap-free, den ≈ 0.70.
-            # It may have higher cheap_cost (WL > gradient) but lower oracle density.
-            # Force it into oracle SA with its known cost so it's prioritized.
-            if oracle_is_fast and best_spread_pos is not None:
-                start_r_spread = self._resolve_fully(best_spread_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                sc_spread, spread_comps = self._true_cost(start_r_spread, benchmark, plc, return_components=True)
-                _sc = spread_comps or {}
-                print(f"[CPLACE] oracle: proxy={sc_spread:.4f}  "
-                      f"den={_sc.get('density_cost','?'):.3f}  "
-                      f"cong={_sc.get('congestion_cost','?'):.3f}", flush=True)
-                if np.isfinite(sc_spread):
-                    # Add with known cost so it gets early SA time (not buried as inf)
-                    starts.append(start_r_spread)
-                    starts_cost.append(sc_spread)
-                if sc_spread < starts_cost[0]:
-                    starts[0] = start_r_spread
-                    starts_cost[0] = sc_spread
-                    ref_comps = spread_comps
             # DIAG: print oracle components of initial oracle-SA start
             _diag_comps = ref_comps or {}
             print(f"[DIAG] pre-SA oracle: proxy={starts_cost[0]:.4f}  "
                   f"den={_diag_comps.get('density_cost', 0.0):.3f}  "
                   f"cong={_diag_comps.get('congestion_cost', 0.0):.3f}", flush=True)
-            print(f"[PH2_ENTER] oracle_is_fast={oracle_is_fast} oracle_call_secs={oracle_call_secs:.1f}", flush=True)
+            print(f"[PH2_ENTER] oracle_calls_possible={_oracle_calls_possible} oracle_call_secs={oracle_call_secs:.1f}", flush=True)
 
-            # Surrogate calibration: compare oracle components with surrogate estimates.
-            # If oracle density > surrogate, gradient phase under-penalized density → boost λ_den.
-            # If oracle congestion > 1.0 (over capacity), boost λ_cong. (Arora-Hazan-Kale 2012)
-            ref_pos = starts[0]
-            surr_den  = self._top_k_mean(
-                self._density_grid(ref_pos, num_hard, sizes_np, grid_rows, grid_cols, canvas_w, canvas_h), 0.10)
-            surr_cong = self._fast_cong(self._all_pos(ref_pos, port_pos), num_hard, sizes_np, fast_eng,
-                                        grid_rows, grid_cols, canvas_w, canvas_h) if fast_eng is not None else 1.0
-            true_den  = (ref_comps or {}).get('density_cost',    surr_den) if ref_comps else surr_den
-            true_cong = (ref_comps or {}).get('congestion_cost',  surr_cong) if ref_comps else surr_cong
-
-            eta = 0.25
-            calib_lam_den   = float(np.clip(0.40 * math.exp(eta * (true_den  - surr_den)),  0.05, 1.50))
-            # For high-congestion benchmarks, allow much stronger congestion penalty.
-            # cap at 0.80 was too weak for ibm17/ibm15/ibm06 (cong > 2.0).
-            _cong_cap = 3.0 if (true_cong > 2.0 or surr_cong > 2.0) else 0.80
-            calib_lam_cong  = float(np.clip(0.25 * math.exp(eta * (true_cong - surr_cong)), 0.01, _cong_cap))
-            if surr_cong > 2.0:
-                calib_lam_cong = max(calib_lam_cong, 2.0)
-            calib_gamma_scale = 1.0  # keep gamma default for second pass
-
-            # Adaptive override: if surrogate over (lam_den, lam_cong) gave us a
-            # data-driven optimum, use it. This is the "weight-space learning"
-            # path: we measured what hparams actually produce low proxy on THIS
-            # benchmark's gradient, instead of relying on a fixed schedule.
-            if adaptive_ld is not None and adaptive_lc is not None:
-                # MAX-blend: take the stronger penalty signal from adaptive or oracle calib.
-                calib_lam_den  = float(np.clip(max(calib_lam_den,  adaptive_ld), 0.05, 4.0))
-                calib_lam_cong = float(np.clip(max(calib_lam_cong, adaptive_lc), 0.01, 4.0))
-                # If the diagnostic flagged density as the dominant cost AND
-                # achieved den_floor > 0.85 (over-packing), boost lam_den 1.5x.
-                if adaptive_diag is not None:
-                    if adaptive_diag.get('den_floor', 0) > 0.85 and adaptive_diag['dominant_axis'] in ('den', 'cong'):
-                        calib_lam_den = float(np.clip(calib_lam_den * 1.5, 0.05, 4.0))
-            elif cached_hparams is not None:
-                calib_lam_den  = float(cached_hparams.get('ld', calib_lam_den))
-                calib_lam_cong = float(cached_hparams.get('lc', calib_lam_cong))
-
-            # Second gradient pass with calibrated parameters (warm-start from best_cheap_pos).
-            # For slow oracle + high congestion: GPU-batched sweep with lam_cong=[2,3,5,8,...].
-            # This replaces the single calibrated gradient with many diverse high-cong passes.
-            if oracle_is_fast:
-                # Extended Phase 2 gradient: density continuation with target_den_start=0.05
-                # needs more iterations to converge → 75% of budget gives ~3x more gradient
-                # steps than the old 55%, critical for reaching lower-density equilibria.
-                grad2_budget = t0 + (TIME_BUDGET - 30) * 0.75
-            else:
-                grad2_budget = t0 + (TIME_BUDGET - 30) * 0.80  # more time for slow-oracle
-            # Pre-compute unconditionally so SOFT_REOPT gets cong_w=2 even when GRAD2 budget is
-            # exceeded (e.g. ibm17 with oracle_call_secs=235s skips the time-gated block).
-            _is_hi_den_fast = (oracle_is_fast and len(soft_movable_idx) > 0 and true_den > 0.88)
-            if time.time() < grad2_budget - 20:
-                _use_cong_sweep = (not oracle_is_fast and surr_cong > 2.0
-                                   and _use_gpu_par and _n_par > 1)
-                if _use_cong_sweep:
-                    # Slow-oracle high-congestion: sweep lam_cong=[0.5..2.5] over full Phase 2.
-                    # lam_den >= 1.0 ensures density stays controlled (ratio ≤ 2.5:1).
-                    # Previous attempt with lam_cong=8 and lam_den=0.28 caused den=3.388 disaster.
-                    _cong_lcos  = [0.5, 0.8, 1.5, 2.5, 0.5, 0.8, 1.5, 2.5]
-                    _bsw_lden   = max(calib_lam_den, 1.0)  # ensure density is controlled
-                    _sweep_run  = 0
-                    while time.time() < grad2_budget - per_start_s - 2:
-                        _bsw_end = min(time.time() + per_start_s, grad2_budget - 2)
-                        _bsw_starts = [topology_seeds[_b % len(topology_seeds)].copy()
-                                       for _b in range(_n_par)]
-                        _noise_b = 0.03 + 0.02 * (_sweep_run % 8)
-                        for _b in range(1, _n_par):
-                            for _idx in movable_idx:
-                                _w2, _h2 = sizes_np[_idx, 0], sizes_np[_idx, 1]
-                                _bsw_starts[_b][_idx, 0] = float(np.clip(
-                                    _bsw_starts[_b][_idx, 0] + np.random.normal(0, _noise_b * canvas_w),
-                                    _w2/2, canvas_w - _w2/2))
-                                _bsw_starts[_b][_idx, 1] = float(np.clip(
-                                    _bsw_starts[_b][_idx, 1] + np.random.normal(0, _noise_b * canvas_h),
-                                    _h2/2, canvas_h - _h2/2))
-                            _bsw_starts[_b] = self._resolve(
-                                _bsw_starts[_b], num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                        _bsw_res = self._gradient_phase_batched(
-                            _bsw_starts, [_bsw_lden] * _n_par,
-                            movable_idx, sizes_np, port_pos, canvas_w, canvas_h,
-                            num_hard, grad_safe_nnp, grad_nnmask,
-                            grid_rows, grid_cols, grad_hpwl_norm, _bsw_end,
-                            fast_eng=fast_eng, cong_start_fracs=[0.1] * _n_par,
-                            lam_cong_overrides=(_cong_lcos * ((_n_par // len(_cong_lcos)) + 1))[:_n_par],
-                        )
-                        _sweep_run += 1
-                        for _pg in _bsw_res:
-                            _pg = self._resolve(_pg, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                            _c = cheap_cost(_pg)
-                            if _c < best_cheap_cost:
-                                best_cheap_pos = _pg.copy()
-                                best_cheap_cost = _c
-                                topology_seeds[0] = _pg.copy()
-                    best_pos = self._resolve_fully(
-                        best_cheap_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                elif not oracle_is_fast or not soft_movable_idx or true_den > 0.88:
-                    # Run Phase 2 calibrated gradient for:
-                    # (a) slow oracle + low-cong (calibrated refinement), OR
-                    # (b) fast oracle + NO soft macros (ibm15): SOFT_PRE/SOFT_REOPT don't help, OR
-                    # (c) high oracle density (> 0.88): even for fast-oracle+soft-macro cases
-                    #     (ibm17 den=0.945), the calibrated lam_den drives hard macros to
-                    #     lower-density regions. Cap at 15s for fast-oracle+soft-macro case
-                    #     since SOFT_PRE is now skipped for cong>2, freeing budget for SA.
-                    _is_hi_den_fast = (oracle_is_fast and soft_movable_idx and true_den > 0.88)
-                    _g2_deadline = min(time.time() + 15, grad2_budget) if _is_hi_den_fast else grad2_budget
-                    pos_grad2 = self._gradient_phase(
-                        best_cheap_pos, movable_idx, sizes_np, port_pos, canvas_w, canvas_h,
-                        num_hard, grad_safe_nnp, grad_nnmask, grid_rows, grid_cols, grad_hpwl_norm, _g2_deadline,
-                        fast_eng=fast_eng,
-                        lam_den_override=calib_lam_den,
-                        lam_cong_override=calib_lam_cong,
-                        gamma_scale=calib_gamma_scale,
-                    )
-                    pos_grad2 = self._resolve(pos_grad2, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    c_grad2 = cheap_cost(pos_grad2)
-                    if c_grad2 < best_cheap_cost:
-                        best_cheap_pos  = pos_grad2.copy()
-                        best_cheap_cost = c_grad2
-                    best_pos = self._resolve_fully(best_cheap_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    # For fast-oracle high-density case: oracle-eval Phase 2 result so
-                    # oracle SA can start from it (not just use pre-Phase2 evaluated position).
-                    if _is_hi_den_fast and time.time() < oracle_end - 25:
-                        try:
-                            _g2_or = self._resolve_fully(best_cheap_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                            _g2_sc = self._true_cost(_g2_or, benchmark, plc)
-                            print(f"[GRAD2] oracle: {_g2_sc:.4f}  (pre-SA best: {starts_cost[0]:.4f})", flush=True)
-                            if np.isfinite(_g2_sc):
-                                if _g2_sc < starts_cost[0]:
-                                    starts[0] = _g2_or
-                                    starts_cost[0] = _g2_sc
-                                else:
-                                    starts.append(_g2_or)
-                                    starts_cost.append(_g2_sc)
-                        except Exception:
-                            pass
-
-            # ── Soft-background density seeds (oracle density gap fix) ───────
-            # Root cause of ibm17 oracle density gap: gradient uses hard-only
-            # density (n_den_macros=num_hard) but oracle measures combined hard+soft.
-            # Fix: pass soft macro positions as fixed background density → gradient
-            # pushes hard macros away from cells occupied by soft macros → lower
-            # combined oracle density. Two targets: gentle (0.85) and aggressive (0.70).
-            # Runs BEFORE GRAD_HC so it gets first access to the pre-oracle time window.
-            if (soft_movable_idx and _is_hi_den_fast
-                    and time.time() < oracle_end - 240):
-                _sb_bg_pos   = best_cheap_pos[np.array(soft_movable_idx)]
-                _sb_bg_sizes = sizes_np[np.array(soft_movable_idx)]
-                for _sb_tgt in [0.85, 0.70]:
-                    if time.time() >= oracle_end - 210:
-                        break
-                    try:
-                        _sb_ddl = min(time.time() + 25, oracle_end - 185)
-                        _sb_gpos = self._gradient_phase(
-                            best_cheap_pos, movable_idx, sizes_np, port_pos,
-                            canvas_w, canvas_h, num_hard,
-                            grad_safe_nnp, grad_nnmask, grid_rows, grid_cols,
-                            grad_hpwl_norm, _sb_ddl,
-                            fast_eng=fast_eng,
-                            lam_den_override=calib_lam_den,
-                            lam_cong_override=calib_lam_cong,
-                            gamma_scale=calib_gamma_scale,
-                            soft_bg_pos=_sb_bg_pos,
-                            soft_bg_sizes=_sb_bg_sizes,
-                            target_den_final_override=_sb_tgt,
-                        )
-                        _sb_gpos = self._resolve_fully(
-                            _sb_gpos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                        _sb_sc = self._true_cost(_sb_gpos, benchmark, plc)
-                        print(f"[SOFT_BG_SEED] tgt={_sb_tgt} oracle: {_sb_sc:.4f}", flush=True)
-                        if np.isfinite(_sb_sc):
-                            starts.append(_sb_gpos)
-                            starts_cost.append(_sb_sc)
-                    except Exception:
-                        pass
-
-            # ── Extra high-cong gradient seeds (ibm15/ibm17: cong>2.0) ───────
-            # When gradient always finds the same high-cong basin (1.7392 for ibm17),
-            # stronger lam_cong [5, 8] may push macros into different channel layouts.
-            # Oracle-evaluate each → give oracle SA diverse basins to start from.
-            if (_is_hi_den_fast and true_cong > 2.0
-                    and time.time() < oracle_end - 120):
-                for _hc_lc in [5.0, 8.0]:
-                    if time.time() >= oracle_end - 90:
-                        break
-                    try:
-                        _hc_ddl = min(time.time() + 25, oracle_end - 65)
-                        _hc_pos = self._gradient_phase(
-                            best_cheap_pos, movable_idx, sizes_np, port_pos, canvas_w, canvas_h,
-                            num_hard, grad_safe_nnp, grad_nnmask, grid_rows, grid_cols, grad_hpwl_norm, _hc_ddl,
-                            fast_eng=fast_eng,
-                            lam_den_override=calib_lam_den,
-                            lam_cong_override=_hc_lc,
-                            gamma_scale=calib_gamma_scale,
-                        )
-                        _hc_pos = self._resolve_fully(
-                            _hc_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                        _hc_sc = self._true_cost(_hc_pos, benchmark, plc)
-                        print(f"[GRAD_HC] lc={_hc_lc} oracle: {_hc_sc:.4f}", flush=True)
-                        if np.isfinite(_hc_sc):
-                            starts.append(_hc_pos)
-                            starts_cost.append(_hc_sc)
-                    except Exception:
-                        pass
-
-            # ── Lloyd spread → gradient reconnect → oracle seed ──────────────
-            # After gradient+resolve gives den=0.812, Lloyd spreading pushes macros
-            # toward their power-diagram Voronoi centroids → more uniform density.
-            # A brief gradient reconnect then restores WL connectivity while strong
-            # lam_den prevents macros from re-clustering.  The resulting position
-            # is oracle-evaluated and added to the SA start pool — if its proxy is
-            # better than the gradient result it becomes starts[0].
-            # Skip LLOYD for high-congestion: spreading macros (Lloyd) in congested
-            # layouts consistently worsens oracle proxy (observed ibm01/06/11/17 data).
-            # Saved 10-30s goes to oracle SA which benefits more from exploration.
-            _lloyd_ok = true_cong <= 2.0
-            if oracle_is_fast and _lloyd_ok and time.time() < oracle_end - 65:
-                try:
-                    _lloyd_t0 = time.time()
-                    _lloyd_deadline = min(_lloyd_t0 + 10.0, oracle_end - 55)
-                    _p_lloyd = self._lloyd_spread(
-                        best_cheap_pos, movable_idx, sizes_np, num_hard,
-                        canvas_w, canvas_h, grid_rows, grid_cols,
-                        n_iters=25, alpha=0.35, deadline=_lloyd_deadline,
-                    )
-                    _p_lloyd = self._resolve(_p_lloyd, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    # Check cheap_cost after Lloyd spread.  LLOYD consistently worsens oracle
-                    # cost (WL rises from spreading, gradient reconnect can't fully compensate).
-                    # Only run the 18s reconnect + oracle eval if spread actually looks good.
-                    _lloyd_cheap_spread = cheap_cost(_p_lloyd)
-                    if _lloyd_cheap_spread < best_cheap_cost * 1.05:
-                        # Brief gradient reconnect: strong density penalty + very low
-                        # target_den → macros spread while WL connectivity is restored.
-                        _reconnect_end = min(time.time() + 18.0, oracle_end - 35)
-                        if time.time() < _reconnect_end - 3:
-                            _ld_lyd = float(np.clip(locals().get('calib_lam_den', 1.0) * 3.0, 1.0, 6.0))
-                            _lc_lyd = float(np.clip(locals().get('calib_lam_cong', 0.3) * 0.5, 0.01, 1.0))
-                            _p_lloyd = self._gradient_phase(
-                                _p_lloyd, movable_idx, sizes_np, port_pos, canvas_w, canvas_h,
-                                num_hard, grad_safe_nnp, grad_nnmask, grid_rows, grid_cols,
-                                grad_hpwl_norm, _reconnect_end,
-                                fast_eng=fast_eng,
-                                lam_den_override=_ld_lyd,
-                                lam_cong_override=_lc_lyd,
-                                target_den_start=0.05,
-                                lam_den_start_frac=1.0,
-                            )
-                            _p_lloyd = self._resolve(_p_lloyd, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                        # Oracle evaluate the Lloyd seed
-                        if time.time() < oracle_end - 25:
-                            _p_lloyd_r = self._resolve_fully(_p_lloyd, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                            _sc_lloyd, _lc_comps = self._true_cost(_p_lloyd_r, benchmark, plc, return_components=True)
-                            _lcc = _lc_comps or {}
-                            print(f"[LLOYD] oracle: proxy={_sc_lloyd:.4f}  "
-                                  f"den={_lcc.get('density_cost','?'):.3f}  "
-                                  f"cong={_lcc.get('congestion_cost','?'):.3f}", flush=True)
-                            if np.isfinite(_sc_lloyd) and _sc_lloyd < starts_cost[0]:
-                                starts[0] = _p_lloyd_r
-                                starts_cost[0] = _sc_lloyd
-                    else:
-                        print(f"[LLOYD] skipped: spread_cheap={_lloyd_cheap_spread:.4f} >> best={best_cheap_cost:.4f}", flush=True)
-                except Exception as _lyd_e:
-                    print(f"[LLOYD] failed: {_lyd_e}", flush=True)
-
-            # Build diverse start pool for oracle SA.
-            # Pool strategy: warm start + gradient result + perturbed + spectral + random.
-            # More diversity = higher chance of escaping the dominant basin.
-            if oracle_is_fast:
-                for noise in [0.20, 0.40, 0.60, 0.80]:
-                    p_pert = self._perturb(pos_init, movable_idx, sizes_np, canvas_w, canvas_h, noise)
-                    p_pert = self._resolve(p_pert, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    starts.append(p_pert)
-                    starts_cost.append(float('inf'))
-                # Add spectral-start candidates as diverse seeds.
-                # Time-guarded: skip if oracle SA time is already < 35s — spectral starts
-                # are proven null (memory 2026-04-28) and cost 5s each. When Phase 2
-                # gradient is long, that time is better spent on oracle SA.
-                _time_for_sa = oracle_end - time.time()
-                if _time_for_sa > 35:
-                    for _ in range(3):
-                        if oracle_end - time.time() < 30:
-                            break
-                        p_spec = self._spectral_start(pos_init, movable_idx, sizes_np, nets_np, net_weights_np,
-                                                      num_hard, canvas_w, canvas_h, fixed_np, time.time() + 5.0)
-                        if p_spec is not None:
-                            p_spec = self._resolve(p_spec, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                            starts.append(p_spec)
-                            starts_cost.append(float('inf'))
-                # Add quadrant-shuffle starts
-                for _ in range(2):
-                    if oracle_end - time.time() < 20:
-                        break
-                    p_quad = self._random_start(pos_init, movable_idx, sizes_np, canvas_w, canvas_h, fixed_np)
-                    p_quad = self._resolve(p_quad, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                    starts.append(p_quad)
-                    starts_cost.append(float('inf'))
-                # Add Phase 0 topology seeds — already gradient-optimized from
-                # diverse random/spectral starts with different λ_den worlds.
-                # Oracle-evaluate each seed (fast: ~3s each) so they get known costs
-                # and are prioritized in sorted_starts rather than queued last as inf.
-                # For ibm17 (517 macros), different seeds explore different density basins;
-                # the cheap_cost-best seed may NOT have the best oracle cost.
+            # Build oracle SA start pool from oracle-evaluated topology seeds.
+            if _oracle_calls_possible >= 3:
+                # Oracle-evaluate Phase 0 topology seeds so they enter the SA pool with
+                # known costs (prioritized over pure-random inf-cost starts).
                 for _p_topo in topology_seeds:
                     if oracle_end - time.time() < 20:
                         starts.append(_p_topo.copy())
@@ -1196,65 +407,38 @@ class Placer:
                         starts.append(_p_topo.copy())
                         starts_cost.append(float('inf'))
 
-                # Pure-random no-gradient oracle SA starts.
-                # CRITICAL EXPERIMENT: all other starts derive from initial.plc or
-                # its gradient derivatives — they all converge to the same basin.
-                # Pure-random (uniform canvas) starts might find a DIFFERENT basin
-                # that has lower density (like RePlAce's ~0.70 vs our 0.81).
-                # If oracle SA from random reaches a different final cost, the
-                # basins ARE separable and we need to improve the random start quality.
-                for _ri in range(3):
-                    try:
-                        _p_rnd = pos_init.copy()
-                        for _rnd_idx in movable_idx:
-                            _rw, _rh = sizes_np[_rnd_idx, 0], sizes_np[_rnd_idx, 1]
-                            _p_rnd[_rnd_idx, 0] = float(np.random.uniform(_rw / 2, canvas_w - _rw / 2))
-                            _p_rnd[_rnd_idx, 1] = float(np.random.uniform(_rh / 2, canvas_h - _rh / 2))
-                        _p_rnd = self._resolve_fully(_p_rnd, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
-                        starts.append(_p_rnd)
-                        starts_cost.append(float('inf'))
-                    except Exception:
-                        pass
+            # Diverse start augmentation: add varied-perturbation + random starts (inf cost).
+            # These sort after oracle-evaluated seeds but expose SA to fresh basins when
+            # the top gradient starts all converge to the same local optimum.
+            # K+L ablation (300s) showed ~0% effect; at 3300s they matter because
+            # ORA_SA_EXIT fires only after exhausting this pool — more starts → more SA slots.
+            if _oracle_calls_possible >= 6:
+                _best_start_idx = int(np.argmin(starts_cost))
+                for _pi in range(3):
+                    _sigma = 0.20 + _pi * 0.15  # 0.20, 0.35, 0.50 — increasing exploration
+                    _p_pert = self._perturb(starts[_best_start_idx], movable_idx, sizes_np,
+                                            canvas_w, canvas_h, _sigma)
+                    _p_pert = self._resolve(_p_pert, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                    starts.append(_p_pert)
+                    starts_cost.append(float('inf'))
+                for _ri in range(2):
+                    _p_rand = pos_init.copy()
+                    _rng_r = np.random.default_rng(20260504 + _ri * 13337)
+                    for _idx in movable_idx:
+                        _w2, _h2 = sizes_np[_idx, 0], sizes_np[_idx, 1]
+                        _p_rand[_idx, 0] = float(_rng_r.uniform(_w2 / 2, canvas_w - _w2 / 2))
+                        _p_rand[_idx, 1] = float(_rng_r.uniform(_h2 / 2, canvas_h - _h2 / 2))
+                    _p_rand = self._resolve(_p_rand, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
+                    starts.append(_p_rand)
+                    starts_cost.append(float('inf'))
 
             best_global_cost = min(starts_cost)
             best_pos = starts[int(np.argmin(starts_cost))].copy()
 
-            if oracle_is_fast:
-                # ── Pre-SA soft macro spread ─────────────────────────────────────────
-                # Spread soft macros with density-aware gradient BEFORE oracle SA so
-                # that SA moves hard macros in the context of already-spread soft macros.
-                # Adds the spread-soft position as a (lower-cost) SA start.
-                # Requires ≥45s remaining so oracle SA still gets meaningful budget.
-                # Skip SOFT_PRE for high-congestion benchmarks (true_cong > 2.0):
-                # spreading soft macros in a congested layout consistently worsens proxy
-                # (ibm06: SOFT_PRE→2.0840 vs best 1.6575; ibm17: SOFT_PRE→1.8267 vs 1.7392).
-                # Saved 28s goes to oracle SA, which benefits from more exploration time.
-                _softpre_ok = true_cong <= 2.0
-                if soft_movable_idx and time.time() < oracle_end - 45 and _softpre_ok:
-                    try:
-                        _pre_ddl = min(time.time() + 25, oracle_end - 40)
-                        _pre_pos_sr = self._gradient_phase_soft(
-                            best_cheap_pos, soft_movable_idx, sizes_np, port_pos,
-                            canvas_w, canvas_h, num_hard,
-                            grad_safe_nnp, grad_nnmask, grid_rows, grid_cols, grad_hpwl_norm,
-                            _pre_ddl,
-                        )
-                        _pre_sc_sr = self._true_cost(_pre_pos_sr, benchmark, plc)
-                        print(f"[SOFT_PRE] oracle: {_pre_sc_sr:.4f}", flush=True)
-                        if np.isfinite(_pre_sc_sr):
-                            if _pre_sc_sr < starts_cost[0]:
-                                starts.insert(0, _pre_pos_sr)
-                                starts_cost.insert(0, _pre_sc_sr)
-                            else:
-                                starts.append(_pre_pos_sr)
-                                starts_cost.append(_pre_sc_sr)
-                            best_global_cost = min(starts_cost)
-                            best_pos = starts[int(np.argmin(starts_cost))].copy()
-                    except Exception as _pre_e:
-                        print(f"[SOFT_PRE] failed: {_pre_e}", flush=True)
-                elif soft_movable_idx and not _softpre_ok:
-                    print(f"[SOFT_PRE] skipped: high cong ({true_cong:.2f} > 2.0), saving 28s for oracle SA", flush=True)
+            slot_dur = 180.0     # default; overridden below for fast oracles
+            _ora_t_scale = 1.0   # default; overridden for slow oracles
 
+            if _oracle_calls_possible >= 3:
                 # Fixed-slot approach: each start gets at most slot_dur seconds.
                 # This prevents long-converged starts from hogging budget — with
                 # 3300s, 3 starts × 900s each is wasteful since SA converges ~300s.
@@ -1266,6 +450,7 @@ class Placer:
                 known   = [(c, p) for c, p in zip(starts_cost, starts) if c < float('inf')]
                 unknown = [(float('inf'), p) for c, p in zip(starts_cost, starts) if c == float('inf')]
                 sorted_starts = sorted(known, key=lambda x: x[0]) + unknown
+                _n_known_starts = len(known)   # oracle-evaluated starts (gradient-initialized)
 
                 # Slow oracle (ibm17: ~30-50s/call) → very few evals per slot.
                 # Scale up SA temperature so each expensive eval explores more broadly.
@@ -1274,10 +459,11 @@ class Placer:
                 for si, (s_cost_init, s_pos) in enumerate(sorted_starts):
                     if time.time() >= oracle_end - 5:
                         break
-                    # Early-exit: 3 consecutive non-improving slots → oracle SA not helping.
-                    # Saves budget for SOFT_REOPT and prevents hard-deadline overruns on
-                    # slow-oracle benchmarks (ibm12: 83s/call, ibm17: 50-90s/call).
-                    if _ora_no_improve >= 3 and si >= 3:
+                    # Exit as soon as 2 consecutive slots fail to improve.
+                    # si >= 2 ensures we always try at least 2 slots before deciding.
+                    # Removed _n_known_starts floor: data shows SA contributes 0% on
+                    # 15/17 benchmarks — forcing 6 slots wastes ~780s for no gain.
+                    if _ora_no_improve >= 2 and si >= 2:
                         print(f"[ORA_SA_EXIT] {_ora_no_improve} consecutive non-improving slots, exiting early at si={si}", flush=True)
                         break
                     slot_end = min(time.time() + slot_dur, oracle_end)
@@ -1320,17 +506,23 @@ class Placer:
                 best_pos = self._resolve_fully(best_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
 
         # ── Soft macro density-aware re-optimization (post-oracle SA) ────────────
-        # Oracle SA only moves hard macros; soft macros stay at WL-optimal positions
-        # from _force_directed_soft (pure WL, no density). Soft macros cluster near
-        # hard macros, contributing to the oracle's ABU density cost (top-10%).
+        # Oracle SA only moves hard macros; soft macros stay at gradient positions.
+        # Soft macros cluster near hard macros, contributing to density cost (top-10%).
         # Re-running with lam_den=5 spreads soft macros to reduce combined density.
+        _sr_cong_w = 0.0  # default; set below when plc available
         if (soft_movable_idx and plc is not None and
-                locals().get('oracle_is_fast', False) and
+                _oracle_calls_possible >= 3 and
                 time.time() < hard_deadline - 12):
+            # cong_w=2.0 for dense benchmarks (ibm14/17: oracle den>0.88 → congestion also over capacity)
+            _is_hi_den = (ref_comps or {}).get('density_cost', 0.0) > 0.88
+            _sr_cong_w = 2.0 if _is_hi_den else 0.0
             try:
-                _prev_oracle_sr = locals().get('best_global_cost', float('inf'))
-                _soft_ddl = min(hard_deadline - 8, time.time() + 25)
-                _sr_cong_w = 2.0 if locals().get('_is_hi_den_fast', False) else 0.0
+                _prev_oracle_sr = best_global_cost
+                # Use remaining oracle budget for gradient (up to 120s cap).
+                # When ORA_SA_EXIT fires early (ibm01: 2600s freed), 25s was wasted budget.
+                _sr_extra = max(0.0, oracle_end - time.time() - oracle_call_secs - 10)
+                _sr_grad_t = max(25.0, min(120.0, _sr_extra))
+                _soft_ddl = min(hard_deadline - 8, time.time() + _sr_grad_t)
                 _best_pos_sr = self._gradient_phase_soft(
                     best_pos, soft_movable_idx, sizes_np, port_pos,
                     canvas_w, canvas_h, num_hard,
@@ -1344,48 +536,15 @@ class Placer:
                 print(f"[SOFT_REOPT] {_sr_mode} oracle: {_sc_sr:.4f}  (prev: {_prev_oracle_sr:.4f})", flush=True)
                 if np.isfinite(_sc_sr) and _sc_sr < _prev_oracle_sr:
                     best_pos = _best_pos_sr
+                    best_global_cost = _sc_sr  # keep best_global_cost in sync for refinement loop
             except Exception as _sr_e:
                 print(f"[SOFT_REOPT] failed: {_sr_e}", flush=True)
-
-        # ── SOFT_REOPT_FB: cong-aware fallback for moderate-density/high-cong ──
-        # Fires when den-only SOFT_REOPT was used (_is_hi_den_fast=False) but
-        # density+congestion are still high enough to benefit from cong-aware spread.
-        # Covers ibm16 (den=0.822, cong=2.057) which falls below the 0.88 threshold.
-        _sr_fb_cond = (
-            soft_movable_idx and plc is not None and
-            locals().get('oracle_is_fast', False) and
-            not locals().get('_is_hi_den_fast', False) and
-            locals().get('true_den', 0.0) > 0.78 and
-            locals().get('true_cong', 0.0) > 2.04 and
-            time.time() < hard_deadline - 12
-        )
-        if _sr_fb_cond:
-            try:
-                # Baseline: best cost so far (SOFT_REOPT result if it improved, else oracle SA)
-                _sr_fb_prev = locals().get('_sc_sr', float('inf'))
-                if not np.isfinite(_sr_fb_prev) or _sr_fb_prev >= locals().get('_prev_oracle_sr', float('inf')):
-                    _sr_fb_prev = locals().get('_prev_oracle_sr', float('inf'))
-                _fb_ddl = min(hard_deadline - 8, time.time() + 25)
-                _best_pos_fb = self._gradient_phase_soft(
-                    best_pos, soft_movable_idx, sizes_np, port_pos,
-                    canvas_w, canvas_h, num_hard,
-                    grad_safe_nnp, grad_nnmask, grid_rows, grid_cols, grad_hpwl_norm,
-                    _fb_ddl,
-                    cong_weight=2.0,
-                    fast_eng=fast_eng,
-                )
-                _sc_fb = self._true_cost(_best_pos_fb, benchmark, plc)
-                print(f"[SOFT_REOPT_FB] cong_w=2 oracle: {_sc_fb:.4f}  (prev: {_sr_fb_prev:.4f})", flush=True)
-                if np.isfinite(_sc_fb) and _sc_fb < _sr_fb_prev:
-                    best_pos = _best_pos_fb
-            except Exception as _fb_e:
-                print(f"[SOFT_REOPT_FB] failed: {_fb_e}", flush=True)
 
         # ── Phase 3: Final selection — oracle result vs pos_init ──────────────
         # Always resolve_fully best_pos first so phase 3 comparison is valid.
         best_pos = self._resolve_fully(best_pos, num_hard, sizes_np, canvas_w, canvas_h, fixed_np)
         # Only run oracle comparison in Phase 3 if oracle is fast enough (skip for ibm17-scale).
-        _oracle_fast_p3 = locals().get('oracle_is_fast', True) and plc is not None
+        _oracle_fast_p3 = _oracle_calls_possible >= 3 and plc is not None
         if _oracle_fast_p3 and time.time() < hard_deadline - 3:
             best_final_cost = self._true_cost(best_pos, benchmark, plc) if plc else float('inf')
             if time.time() < hard_deadline - 2:
@@ -1395,22 +554,48 @@ class Placer:
                     best_pos = init_rr.copy()
         result = benchmark.macro_positions.clone()
         result[:] = torch.from_numpy(best_pos).float()
-        # Float32 quantization can reintroduce tiny overlaps (error ~1e-4 for large coords).
-        # Re-resolve in float32 space to guarantee VALID output.
+        # Float32 quantization can reintroduce tiny overlaps.  Resolve *inside float32 space*:
+        # each round converts back to float32 between resolve passes so the check and the
+        # final output agree (the plain _total_overlap check uses float64 and can miss tiny
+        # overlaps that are only visible after float32 rounding, causing persistent INVALID).
         best_pos32 = result.numpy().astype(np.float64)
-        best_pos32 = self._resolve(best_pos32, num_hard, sizes_np, canvas_w, canvas_h, fixed_np, max_iter=200, min_iter=10)
+        for _rnd32 in range(30):
+            best_pos32 = self._resolve(best_pos32, num_hard, sizes_np, canvas_w, canvas_h, fixed_np, max_iter=500, min_iter=50)
+            # Re-quantise to float32 and check *in float32 space*
+            _q32 = torch.from_numpy(best_pos32).float().numpy().astype(np.float64)
+            if self._total_overlap(_q32, num_hard, sizes_np) < 1e-10:
+                best_pos32 = _q32
+                break
+            best_pos32 = _q32  # next resolve starts from float32-aligned positions
+        # After SOFT_REOPT, a soft macro may overlap a hard macro due to float32 quantization.
+        # Fix: targeted push — move only the soft macro out of any hard macro it touches.
+        # Do NOT resolve soft-soft overlaps (gradient handles those; mass-resolve destroys placement).
+        _n_total = best_pos32.shape[0]
+        if _n_total > num_hard and soft_movable_idx:
+            _soft_idx_list = list(soft_movable_idx)
+            for _pass in range(5):
+                _any_fix = False
+                for _hi in range(num_hard):
+                    _xh = best_pos32[_hi, 0]; _yh = best_pos32[_hi, 1]
+                    _wh = sizes_np[_hi, 0];   _hh = sizes_np[_hi, 1]
+                    for _si_fix in _soft_idx_list:
+                        _xs = best_pos32[_si_fix, 0]; _ys = best_pos32[_si_fix, 1]
+                        _ws = sizes_np[_si_fix, 0];   _hs = sizes_np[_si_fix, 1]
+                        ox = (_ws + _wh) * 0.5 - abs(_xs - _xh)
+                        oy = (_hs + _hh) * 0.5 - abs(_ys - _yh)
+                        if ox > 1e-8 and oy > 1e-8:
+                            _any_fix = True
+                            if ox < oy:
+                                best_pos32[_si_fix, 0] = float(np.clip(
+                                    _xs + (ox + 0.001) * (1.0 if _xs >= _xh else -1.0),
+                                    _ws / 2, canvas_w - _ws / 2))
+                            else:
+                                best_pos32[_si_fix, 1] = float(np.clip(
+                                    _ys + (oy + 0.001) * (1.0 if _ys >= _yh else -1.0),
+                                    _hs / 2, canvas_h - _hs / 2))
+                if not _any_fix:
+                    break
         result[:] = torch.from_numpy(best_pos32).float()
-        # Persist learned hparams for this benchmark, plus diagnostic info.
-        try:
-            if adaptive_ld is not None and adaptive_lc is not None:
-                self._save_hparam_cache(bench_fingerprint, dict(
-                    ld=float(adaptive_ld), lc=float(adaptive_lc),
-                    proxy=float(best_cheap_cost),
-                    n_probes=len(probe_log),
-                    diag=adaptive_diag,
-                ))
-        except Exception:
-            pass
         return result
 
     # ── Oracle SA with temperature ────────────────────────────────────────────
@@ -1460,6 +645,7 @@ class Placer:
 
         step        = 0
         t_run_start = time.time()
+        _conv_t_last_best = t_run_start  # time of last best_cost improvement (for convergence exit)
 
         # Cached combined position array (hard macros + ports), updated incrementally
         cur_all = self._all_pos(cur_pos, port_pos)
@@ -1651,6 +837,7 @@ class Placer:
                         if cost < best_cost:
                             best_cost = cost; best_pos = cur_pos.copy()
                             best_orient = dict(cur_orient)
+                            _conv_t_last_best = time.time()
                     else:
                         plc.update_macro_orientation(plc_idx, old_orient)
                     continue
@@ -1819,6 +1006,18 @@ class Placer:
                 if cost < best_cost:
                     best_cost = cost; best_pos = cand.copy()
                     best_orient = dict(cur_orient)
+                    _conv_t_last_best = time.time()
+
+            # Convergence exit: free remaining slot time when SA has stalled.
+            # Stall threshold = max(90s, min(50% of slot, 300s)).
+            # Guard: ≥3 oracle calls and ≥25% of slot time elapsed.
+            # Note: step>=10 would never fire for slow oracles (31s/call in 276s slot → 8 max steps).
+            if step >= 3:
+                _stall = time.time() - _conv_t_last_best
+                _stall_thr = max(90.0, min(0.50 * _total_sa_dur, 300.0))
+                if _stall > _stall_thr and time.time() - t_run_start > 0.25 * _total_sa_dur:
+                    print(f"[SLOT_CONV] step={step} stall={_stall:.0f}s thr={_stall_thr:.0f}s best={best_cost:.4f}", flush=True)
+                    break
 
         # Restore plc to best-found orientations before returning
         if has_orient:
@@ -1827,316 +1026,15 @@ class Placer:
 
         return best_pos
 
-    # ── SA (cheap warm-up) ─────────────────────────────────────────────────────
-
-    def _run_sa(self, pos, nets_np, macro_to_nets, movable_idx,
-                sizes, port_pos, canvas_w, canvas_h,
-                grid_rows, grid_cols, num_hard, T, n_steps, hpwl_norm,
-                safe_nnp, nnmask):
-        p = pos.copy(); ap = self._all_pos(p, port_pos)
-        cell_w=canvas_w/grid_cols; cell_h=canvas_h/grid_rows; cell_a=cell_w*cell_h
-        lx=p[:num_hard,0]-sizes[:num_hard,0]/2; rx=p[:num_hard,0]+sizes[:num_hard,0]/2
-        ly=p[:num_hard,1]-sizes[:num_hard,1]/2; ry=p[:num_hard,1]+sizes[:num_hard,1]/2
-        all_x=ap[safe_nnp,0]; all_y=ap[safe_nnp,1]
-        INF=1e15
-        mx=np.where(nnmask,all_x,-INF); mn=np.where(nnmask,all_x,INF)
-        ryn=np.where(nnmask,all_y,-INF); lyn=np.where(nnmask,all_y,INF)
-        net_hpwl=(mx.max(1)-mn.min(1))+(ryn.max(1)-lyn.min(1))
-        dens=self._density_grid(p,num_hard,sizes,grid_rows,grid_cols,canvas_w,canvas_h)
-        cur_density=self._top_k_mean(dens,0.10)
-        cur_wl_norm=float(net_hpwl.sum())/hpwl_norm
-        cur_cost=cur_wl_norm+0.5*cur_density
-        best_cost=cur_cost; best_p=p.copy()
-        n_mov=len(movable_idx); step_scale=max(0.02,MAX_STEP*(T/T_SA_START))
-
-        for _ in range(n_steps):
-            is_swap=(random.random()<SWAP_PROB)
-            if is_swap:
-                idx=movable_idx[random.randrange(n_mov)]; idx2=movable_idx[random.randrange(n_mov)]
-                if idx==idx2: continue
-                nx,ny=p[idx2,0],p[idx2,1]; nx2,ny2=p[idx,0],p[idx,1]
-                w,h=sizes[idx,0],sizes[idx,1]; w2,h2=sizes[idx2,0],sizes[idx2,1]
-                if (nx<w/2 or nx>canvas_w-w/2 or ny<h/2 or ny>canvas_h-h/2 or
-                    nx2<w2/2 or nx2>canvas_w-w2/2 or ny2<h2/2 or ny2>canvas_h-h2/2): continue
-                ox_c,oy_c=p[idx,0],p[idx,1]; ox_c2,oy_c2=p[idx2,0],p[idx2,1]
-                nets_aff=list(set(macro_to_nets.get(idx,[]))|set(macro_to_nets.get(idx2,[])))
-                new_hpwls={}; delta_wl=0.
-                for ni in nets_aff:
-                    nodes=nets_np[ni]; xs_n=ap[nodes,0].copy(); ys_n=ap[nodes,1].copy()
-                    for k,node in enumerate(nodes):
-                        if node==idx: xs_n[k]=nx; ys_n[k]=ny
-                        elif node==idx2: xs_n[k]=nx2; ys_n[k]=ny2
-                    nh=(xs_n.max()-xs_n.min())+(ys_n.max()-ys_n.min())
-                    new_hpwls[ni]=nh; delta_wl+=nh-net_hpwl[ni]
-                self._add_macro_to_dens(dens,ox_c,oy_c,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                self._add_macro_to_dens(dens,ox_c2,oy_c2,w2,h2,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                self._add_macro_to_dens(dens,nx,ny,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                self._add_macro_to_dens(dens,nx2,ny2,w2,h2,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                new_density=self._top_k_mean(dens,0.10)
-                self._add_macro_to_dens(dens,nx,ny,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                self._add_macro_to_dens(dens,nx2,ny2,w2,h2,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                self._add_macro_to_dens(dens,ox_c,oy_c,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                self._add_macro_to_dens(dens,ox_c2,oy_c2,w2,h2,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                ov_old=0.; ov_new=0.
-                for ii,(xxi,yyi,wwi,hhi) in [(idx,(ox_c,oy_c,w,h)),(idx2,(ox_c2,oy_c2,w2,h2))]:
-                    lxi=xxi-wwi/2;rxi=xxi+wwi/2;lyi=yyi-hhi/2;ryi=yyi+hhi/2
-                    oxa=np.maximum(0.,np.minimum(rxi,rx)-np.maximum(lxi,lx))
-                    oya=np.maximum(0.,np.minimum(ryi,ry)-np.maximum(lyi,ly))
-                    ov_old+=(oxa*oya).sum()-oxa[ii]*oya[ii]
-                for ii,(xxi,yyi,wwi,hhi) in [(idx,(nx,ny,w,h)),(idx2,(nx2,ny2,w2,h2))]:
-                    lxi=xxi-wwi/2;rxi=xxi+wwi/2;lyi=yyi-hhi/2;ryi=yyi+hhi/2
-                    oxa=np.maximum(0.,np.minimum(rxi,rx)-np.maximum(lxi,lx))
-                    oya=np.maximum(0.,np.minimum(ryi,ry)-np.maximum(lyi,ly))
-                    ov_new+=(oxa*oya).sum()-oxa[ii]*oya[ii]
-                delta_cost=(delta_wl/hpwl_norm+0.5*(new_density-cur_density)+OVERLAP_WEIGHT*(ov_new-ov_old))
-                accept=(delta_cost<0 or (T>1e-12 and random.random()<math.exp(max(-30.,-delta_cost/T))))
-                if accept:
-                    p[idx,0]=nx;p[idx,1]=ny;ap[idx,0]=nx;ap[idx,1]=ny
-                    p[idx2,0]=nx2;p[idx2,1]=ny2;ap[idx2,0]=nx2;ap[idx2,1]=ny2
-                    lx[idx]=nx-w/2;rx[idx]=nx+w/2;ly[idx]=ny-h/2;ry[idx]=ny+h/2
-                    lx[idx2]=nx2-w2/2;rx[idx2]=nx2+w2/2;ly[idx2]=ny2-h2/2;ry[idx2]=ny2+h2/2
-                    for ni in nets_aff: net_hpwl[ni]=new_hpwls[ni]
-                    self._add_macro_to_dens(dens,ox_c,oy_c,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                    self._add_macro_to_dens(dens,ox_c2,oy_c2,w2,h2,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                    self._add_macro_to_dens(dens,nx,ny,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                    self._add_macro_to_dens(dens,nx2,ny2,w2,h2,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                    cur_density=new_density; cur_wl_norm+=delta_wl/hpwl_norm
-                    cur_cost=cur_wl_norm+0.5*cur_density
-                    if cur_cost<best_cost: best_cost=cur_cost; best_p=p.copy()
-            else:
-                idx=movable_idx[random.randrange(n_mov)]
-                w,h=sizes[idx,0],sizes[idx,1]; ox_c,oy_c=p[idx,0],p[idx,1]
-                nx=float(np.clip(ox_c+np.random.normal(0,step_scale),w/2,canvas_w-w/2))
-                ny=float(np.clip(oy_c+np.random.normal(0,step_scale),h/2,canvas_h-h/2))
-                nets_i=macro_to_nets.get(idx,[])
-                new_hpwls=[]; delta_wl=0.
-                for ni in nets_i:
-                    nodes=nets_np[ni]; mask=(nodes==idx)
-                    xs_n=np.where(mask,nx,ap[nodes,0]); ys_n=np.where(mask,ny,ap[nodes,1])
-                    nh=(xs_n.max()-xs_n.min())+(ys_n.max()-ys_n.min())
-                    new_hpwls.append(nh); delta_wl+=nh-net_hpwl[ni]
-                self._add_macro_to_dens(dens,ox_c,oy_c,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                self._add_macro_to_dens(dens,nx,ny,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                new_density=self._top_k_mean(dens,0.10)
-                self._add_macro_to_dens(dens,nx,ny,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                self._add_macro_to_dens(dens,ox_c,oy_c,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                lx_o=ox_c-w/2;rx_o=ox_c+w/2;ly_o=oy_c-h/2;ry_o=oy_c+h/2
-                oa=np.maximum(0.,np.minimum(rx_o,rx)-np.maximum(lx_o,lx))
-                ob2=np.maximum(0.,np.minimum(ry_o,ry)-np.maximum(ly_o,ly))
-                ov_o=(oa*ob2).sum()-oa[idx]*ob2[idx]
-                lx_n=nx-w/2;rx_n=nx+w/2;ly_n=ny-h/2;ry_n=ny+h/2
-                oa2=np.maximum(0.,np.minimum(rx_n,rx)-np.maximum(lx_n,lx))
-                ob3=np.maximum(0.,np.minimum(ry_n,ry)-np.maximum(ly_n,ly))
-                ov_n=(oa2*ob3).sum()-oa2[idx]*ob3[idx]
-                delta_cost=(delta_wl/hpwl_norm+0.5*(new_density-cur_density)+OVERLAP_WEIGHT*(ov_n-ov_o))
-                accept=(delta_cost<0 or (T>1e-12 and random.random()<math.exp(max(-30.,-delta_cost/T))))
-                if accept:
-                    p[idx,0]=nx;p[idx,1]=ny;ap[idx,0]=nx;ap[idx,1]=ny
-                    lx[idx]=lx_n;rx[idx]=rx_n;ly[idx]=ly_n;ry[idx]=ry_n
-                    for ni,nh in zip(nets_i,new_hpwls): net_hpwl[ni]=nh
-                    self._add_macro_to_dens(dens,ox_c,oy_c,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,-1)
-                    self._add_macro_to_dens(dens,nx,ny,w,h,cell_w,cell_h,grid_rows,grid_cols,cell_a,+1)
-                    cur_density=new_density; cur_wl_norm+=delta_wl/hpwl_norm
-                    cur_cost=cur_wl_norm+0.5*cur_density
-                    if cur_cost<best_cost: best_cost=cur_cost; best_p=p.copy()
-        return best_p
-
-    # ── Constructive placement: build low-density overlap-free positions ─────────
-    # Places macros one-by-one (largest first), guaranteeing:
-    # 1. No physical overlap with any previously placed macro
-    # 2. Density ≤ target_den in every cell covered after placement
-    # Sorts candidates by distance to WL-force centroid → first feasible = WL-nearest.
-    # Produces oracle density ≈ physical_utilization, giving oracle SA a different
-    # (lower-density) basin to start from vs the gradient+_resolve output.
-
-    def _constructive_place(self, movable_idx, sizes_np, num_hard, canvas_w, canvas_h,
-                             fixed_np, port_pos, nets_np, net_weights,
-                             grid_rows, grid_cols, init_pos=None, target_den=0.70):
-        n_total = sizes_np.shape[0]
-        n_ports = port_pos.shape[0]
-        cell_w = canvas_w / grid_cols
-        cell_h = canvas_h / grid_rows
-
-        pos = init_pos.copy() if init_pos is not None else np.zeros((num_hard, 2), dtype=np.float64)
-        placed = np.zeros(num_hard, dtype=bool)
-
-        mov_set = set(movable_idx)
-        for idx in range(num_hard):
-            if idx not in mov_set:
-                placed[idx] = True
-
-        # Net adjacency for WL centroid computation
-        macro_to_nets = {}
-        for ni, net in enumerate(nets_np):
-            for j in net:
-                j_int = int(j)
-                if j_int < n_total:
-                    macro_to_nets.setdefault(j_int, []).append(ni)
-
-        # Candidate positions: grid cell centers + half-step offsets for denser coverage
-        all_cands_xy = []
-        for r in range(grid_rows):
-            for c in range(grid_cols):
-                all_cands_xy.append(((c + 0.5) * cell_w, (r + 0.5) * cell_h))
-        # Half-step grid for finer coverage
-        for r in range(grid_rows + 1):
-            for c in range(grid_cols + 1):
-                all_cands_xy.append((c * cell_w, r * cell_h))
-        all_cands_xy = list(set(all_cands_xy))  # deduplicate
-
-        # Placed macro bounding boxes for fast overlap check
-        placed_boxes = []  # list of (lx, rx, ly, ry) for placed macros
-        for idx in range(num_hard):
-            if not mov_set or idx not in mov_set:
-                px, py = pos[idx, 0], pos[idx, 1]
-                hw, hh = sizes_np[idx, 0] / 2, sizes_np[idx, 1] / 2
-                placed_boxes.append((px - hw, px + hw, py - hh, py + hh))
-            else:
-                placed_boxes.append(None)
-
-        sorted_mov = sorted(movable_idx, key=lambda i: -(sizes_np[i, 0] * sizes_np[i, 1]))
-
-        for idx in sorted_mov:
-            w, h = float(sizes_np[idx, 0]), float(sizes_np[idx, 1])
-            half_w, half_h = w / 2, h / 2
-
-            # WL centroid from placed macros + ports
-            fx_sum, fy_sum, fw_sum = 0.0, 0.0, 0.0
-            for ni in macro_to_nets.get(idx, []):
-                wt = float(net_weights[ni]) if ni < len(net_weights) else 1.0
-                for j in nets_np[ni]:
-                    j_int = int(j)
-                    if j_int == idx:
-                        continue
-                    if j_int < num_hard and placed[j_int]:
-                        fx_sum += wt * pos[j_int, 0]
-                        fy_sum += wt * pos[j_int, 1]
-                        fw_sum += wt
-                    elif j_int >= n_total and j_int < n_total + n_ports:
-                        p_i = j_int - n_total
-                        fx_sum += wt * port_pos[p_i, 0]
-                        fy_sum += wt * port_pos[p_i, 1]
-                        fw_sum += wt
-
-            if fw_sum > 1e-9:
-                tgt_x = float(np.clip(fx_sum / fw_sum, half_w, canvas_w - half_w))
-                tgt_y = float(np.clip(fy_sum / fw_sum, half_h, canvas_h - half_h))
-            else:
-                tgt_x, tgt_y = canvas_w / 2, canvas_h / 2
-
-            cands_sorted = sorted(
-                all_cands_xy,
-                key=lambda c: (c[0] - tgt_x) ** 2 + (c[1] - tgt_y) ** 2,
-            )
-
-            best_x, best_y = tgt_x, tgt_y
-            found = False
-
-            for px_raw, py_raw in cands_sorted:
-                px = float(np.clip(px_raw, half_w, canvas_w - half_w))
-                py = float(np.clip(py_raw, half_h, canvas_h - half_h))
-
-                # Physical overlap check only (density is a global metric, not per-cell)
-                ok = True
-                for prev in range(num_hard):
-                    if not placed[prev]:
-                        continue
-                    pb = placed_boxes[prev]
-                    if pb is None:
-                        continue
-                    if (px - half_w < pb[1] and px + half_w > pb[0] and
-                            py - half_h < pb[3] and py + half_h > pb[2]):
-                        ok = False
-                        break
-                if ok:
-                    best_x, best_y = px, py
-                    found = True
-                    break
-
-            pos[idx, 0] = best_x
-            pos[idx, 1] = best_y
-            placed[idx] = True
-            pb_new = (best_x - half_w, best_x + half_w, best_y - half_h, best_y + half_h)
-            placed_boxes[idx] = pb_new
-
-        return pos
-
-    # ── Lloyd / Voronoi spreading ─────────────────────────────────────────────
-    # Iteratively moves each macro toward the centroid of its Voronoi cell.
-    # Each grid cell is assigned to the nearest macro via a power-diagram
-    # (d² - area_weight × cell_area) so larger macros own proportionally more
-    # cells. After n_iters iterations the macros are approximately uniformly
-    # distributed → density close to physical utilization rather than 0.81+.
-    # Inspired by Lloyd's algorithm (optimal vector quantization / K-means).
-
-    def _lloyd_spread(self, pos, movable_idx, sizes_np, num_hard,
-                      canvas_w, canvas_h, grid_rows, grid_cols,
-                      n_iters=20, alpha=0.35, deadline=None):
-        pos = pos.copy()
-        n_mov = len(movable_idx)
-        if n_mov == 0:
-            return pos
-
-        cell_w = canvas_w / grid_cols
-        cell_h = canvas_h / grid_rows
-
-        # Grid cell centres — computed once
-        cx_grid = (np.arange(grid_cols, dtype=np.float64) + 0.5) * cell_w
-        cy_grid = (np.arange(grid_rows, dtype=np.float64) + 0.5) * cell_h
-        CX, CY  = np.meshgrid(cx_grid, cy_grid)      # (R, C)
-        CX_flat = CX.ravel()                          # (R*C,)
-        CY_flat = CY.ravel()
-
-        mov_arr    = np.array(movable_idx, dtype=np.int64)
-        macro_area = sizes_np[mov_arr, 0] * sizes_np[mov_arr, 1]  # (n_mov,)
-        area_w     = macro_area / max(float(macro_area.max()), 1e-9)  # [0,1]
-        # power-diagram weight: attract cells proportional to macro area
-        power_bias = area_w * cell_w * cell_h  # (n_mov,)
-
-        hw = sizes_np[mov_arr, 0] / 2.0  # (n_mov,)
-        hh = sizes_np[mov_arr, 1] / 2.0
-
-        for _it in range(n_iters):
-            if deadline is not None and time.time() >= deadline:
-                break
-
-            mx = pos[mov_arr, 0]  # (n_mov,)
-            my = pos[mov_arr, 1]
-
-            # Power-diagram assignment: (n_cells, n_mov)
-            dx2   = (CX_flat[:, np.newaxis] - mx[np.newaxis, :]) ** 2
-            dy2   = (CY_flat[:, np.newaxis] - my[np.newaxis, :]) ** 2
-            d2pw  = dx2 + dy2 - power_bias[np.newaxis, :]
-            assign = np.argmin(d2pw, axis=1)  # (n_cells,) → macro index
-
-            # Vectorised centroid via bincount
-            cnt  = np.bincount(assign, minlength=n_mov).astype(np.float64)
-            vor_x = np.bincount(assign, weights=CX_flat, minlength=n_mov)
-            vor_y = np.bincount(assign, weights=CY_flat, minlength=n_mov)
-            # Avoid div-by-zero for macros that own no cells (use current pos)
-            empty = (cnt == 0)
-            cnt[empty] = 1.0
-            vor_x = vor_x / cnt; vor_y = vor_y / cnt
-            vor_x[empty] = mx[empty]; vor_y[empty] = my[empty]
-
-            # Move alpha fraction toward centroid
-            new_x = mx + alpha * (vor_x - mx)
-            new_y = my + alpha * (vor_y - my)
-            pos[mov_arr, 0] = np.clip(new_x, hw, canvas_w - hw)
-            pos[mov_arr, 1] = np.clip(new_y, hh, canvas_h - hh)
-
-        return pos
-
     # ── Gradient-based placement (ePlace-style smooth WL + density) ──────────
 
     def _gradient_phase(self, pos, movable_idx, sizes_np, port_pos,
                         canvas_w, canvas_h, num_hard,
                         safe_nnp, nnmask, grid_rows, grid_cols, hpwl_norm, deadline,
                         fast_eng=None, lam_den_override=None, lam_cong_override=None,
-                        gamma_scale=1.0, cong_start_frac=0.60,
+                        cong_start_frac=0.60,
                         target_den_start=None, lam_den_start_frac=0.05,
-                        anchor_pos=None, anchor_weight=0.0, anchor_decay_frac=0.5,
-                        soft_bg_pos=None, soft_bg_sizes=None, target_den_final_override=None):
+):
         """Phase 0/2b: Adam on smooth WL + soft density + soft congestion.
         Override params allow surrogate calibration from oracle feedback."""
         n_mov = len(movable_idx)
@@ -2200,42 +1098,9 @@ class Placer:
         cell_ty = cell_by + cell_h
         _smooth_r = int(fast_eng['smooth']) if (fast_eng is not None and 'smooth' in fast_eng) else 0
 
-        # Fixed soft-macro background density for joint hard+soft optimization.
-        # Soft positions are held constant; gradient on hard macros sees the combined
-        # overflow → hard macros are pushed away from cells occupied by soft macros.
-        soft_bg_den_t = None
-        if soft_bg_pos is not None and soft_bg_sizes is not None and len(soft_bg_pos) > 0:
-            with torch.no_grad():
-                _sb_pt = torch.from_numpy(np.asarray(soft_bg_pos, dtype=np.float32)).to(dev)
-                _sb_st = torch.from_numpy(np.asarray(soft_bg_sizes, dtype=np.float32)).to(dev)
-                _sb_lx = _sb_pt[:, 0] - _sb_st[:, 0] / 2
-                _sb_rx = _sb_pt[:, 0] + _sb_st[:, 0] / 2
-                _sb_by = _sb_pt[:, 1] - _sb_st[:, 1] / 2
-                _sb_ty = _sb_pt[:, 1] + _sb_st[:, 1] / 2
-                _sb_cx = torch.clamp(
-                    torch.minimum(_sb_rx.unsqueeze(1), cell_rx.unsqueeze(0)) -
-                    torch.maximum(_sb_lx.unsqueeze(1), cell_lx.unsqueeze(0)),
-                    min=0.0) / cell_w
-                _sb_cy = torch.clamp(
-                    torch.minimum(_sb_ty.unsqueeze(1), cell_ty.unsqueeze(0)) -
-                    torch.maximum(_sb_by.unsqueeze(1), cell_by.unsqueeze(0)),
-                    min=0.0) / cell_h
-                soft_bg_den_t = torch.einsum('ic,ir->rc', _sb_cx, _sb_cy).detach()
-                if _smooth_r > 0:
-                    _ks = 2 * _smooth_r + 1
-                    soft_bg_den_t = torch.nn.functional.avg_pool2d(
-                        torch.nn.functional.pad(
-                            soft_bg_den_t.unsqueeze(0).unsqueeze(0),
-                            [_smooth_r] * 4, mode='replicate'),
-                        _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-            _sb_arr = np.asarray(soft_bg_sizes, dtype=np.float32)
-            _sb_util = float((_sb_arr[:, 0] * _sb_arr[:, 1]).sum()) / max(float(canvas_w * canvas_h), 1e-9)
-            print(f"[SOFT_BG] n_soft={len(soft_bg_pos)}, soft_util={_sb_util:.3f}, "
-                  f"soft_max_den={float(soft_bg_den_t.max().item()):.3f}", flush=True)
-
         canvas_diag  = float(canvas_w + canvas_h)
-        gamma_start  = canvas_diag * 0.04 * gamma_scale   # coarse smooth at start
-        gamma_end    = canvas_diag * 0.004 * gamma_scale  # sharp at end
+        gamma_start  = canvas_diag * 0.04
+        gamma_end    = canvas_diag * 0.004
         # Adaptive density target: 5% slack above physical utilization.
         # ePlace/RePlAce only penalize cells above this threshold → macros spread
         # until no cell exceeds target. Raw penalty (no threshold) was why we
@@ -2248,8 +1113,6 @@ class Placer:
         # benchmarks so macros settle in a lower-density basin (~RePlAce's 0.70-0.75).
         if target_den_start is not None and target_den_start < 0.20 and _utilization < 0.85:
             target_den_final = min(target_den_final, 0.70)
-        if target_den_final_override is not None:
-            target_den_final = float(target_den_final_override)
         # ePlace/RePlAce density continuation: ramp target_den from a low value up to
         # the physical utilization × 1.08. When target_den_start is near 0, every cell
         # contributes to the density penalty from step 1, forcing global spreading.
@@ -2264,19 +1127,10 @@ class Placer:
         t_start       = time.time()
         t_total       = max(1.0, deadline - t_start)
 
-        # ePlace-style density overflow tracking: if density stays high after
-        # the normal gradient run, we do a density-overflow pass with lam_den
-        # ramped much higher (up to 4×) to force macros to spread out.
-        # This mimics ePlace's Lagrangian multiplier update for density.
-        overflow_boost = 1.0   # multiplier on lam_den_end; updated after each pass
-        _best_pos_grad = pos.copy()
-        _best_pos_cost = float('inf')
-
         # Precompute congestion tensors if fast_eng available.
         # GPU: no n_pairs limit (matmul is O(p×r + p×c) not O(p×r×c)).
         # CPU: limit to 200K pairs (memory guard for einsum).
         cong_enabled = False
-        macro_block_enabled = False
         cong_use_matmul = False
         if fast_eng is not None:
             n_pairs = len(fast_eng['src'])
@@ -2339,17 +1193,11 @@ class Placer:
         top_k_den_h = max(1, int(grid_rows * grid_cols * 0.10))
         tau_den_h   = 0.5  # will be annealed inside loop
 
-        # Anchor tensor: topology preservation for spread seeds (bisection / CPLACE / SCALE).
-        # anchor_weight decays to 0 over anchor_decay_frac of gradient time, then pure WL+den.
-        anchor_t = None
-        if anchor_weight > 0.0 and anchor_pos is not None:
-            _anc_np = anchor_pos[mov_arr].astype(np.float32)
-            anchor_t = torch.from_numpy(_anc_np).to(dev)
-
         step = 0
         t_first = None
         _grad_loss_ema = None  # exponential moving average of loss for plateau detection
-        _grad_plateau_steps = 0
+        _prev_ema_check = None  # EMA value at last 50-step checkpoint
+        _plateau_count = 0
 
         while time.time() < deadline:
             t_s  = time.time()
@@ -2412,8 +1260,7 @@ class Placer:
                         density.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                     _ks, stride=1, padding=0).squeeze(0).squeeze(0)
             _target_t = torch.tensor(target_den_cur, dtype=torch.float32, device=dev)
-            density_penalty = density if soft_bg_den_t is None else density + soft_bg_den_t
-            den_ovflow = torch.clamp(density_penalty - _target_t, min=0.0)
+            den_ovflow = torch.clamp(density - _target_t, min=0.0)
             _rho_hat = torch.fft.rfft2(den_ovflow)
             _phi_es  = torch.fft.irfft2(_rho_hat * phi_green_t, s=(grid_rows, grid_cols))
             fft_den  = (den_ovflow * _phi_es).mean() / _phi_norm
@@ -2454,35 +1301,6 @@ class Placer:
                     V_cong = ((w_ct.unsqueeze(1) * row_V).T @ col_w_V) / v_cap_t
                 else:
                     V_cong = torch.einsum('p,pr,pc->rc', w_ct, row_V, col_w_V) / v_cap_t
-                # ── Macro routing blockage: hard macros block routing channels ──
-                # Oracle formula per cell (r,c): V_macro += x_ov(macro,col_c) × valloc
-                # applied for all rows r that the macro overlaps.
-                # Differentiable: use row_cov (fraction of row covered) as soft indicator.
-                if macro_block_enabled:
-                    mx_hard = pos_cur[:num_hard, 0]
-                    my_hard = pos_cur[:num_hard, 1]
-                    lx_mac = (mx_hard - hw_macro).unsqueeze(1)  # (num_hard, 1)
-                    rx_mac = (mx_hard + hw_macro).unsqueeze(1)
-                    col_lo = cell_x_edges[:-1].unsqueeze(0)
-                    col_hi = cell_x_edges[1:].unsqueeze(0)
-                    x_ov = torch.clamp(torch.minimum(rx_mac, col_hi) -
-                                       torch.maximum(lx_mac, col_lo), min=0.0)  # (num_hard, grid_cols)
-                    ly_mac = (my_hard - hh_macro).unsqueeze(1)
-                    ry_mac = (my_hard + hh_macro).unsqueeze(1)
-                    row_lo = cell_y_edges[:-1].unsqueeze(0)
-                    row_hi = cell_y_edges[1:].unsqueeze(0)
-                    y_ov = torch.clamp(torch.minimum(ry_mac, row_hi) -
-                                       torch.maximum(ly_mac, row_lo), min=0.0)  # (num_hard, grid_rows)
-                    # row_cov: fraction of each row covered by macro (soft binary indicator)
-                    row_cov = y_ov / gw_t  # normalize to [0,1] approx
-                    # V_macro[r,c] = sum_i x_ov[i,c] × row_cov[i,r] × valloc / v_cap
-                    V_macro = torch.einsum('ic,ir->rc', x_ov, row_cov) * (valloc / v_cap_t)
-                    # H_macro[r,c] = sum_i col_cov[i,c] × y_ov[i,r] × halloc / h_cap
-                    col_cov = x_ov / gh_t
-                    H_macro = torch.einsum('ic,ir->rc', col_cov, y_ov) * (halloc / h_cap_t)
-                    H_cong = H_cong + H_macro
-                    V_cong = V_cong + V_macro
-
                 cong_combined = H_cong + V_cong
                 excess_cong = torch.clamp(cong_combined - 1.0, min=0.0)
                 # Soft ABU (top-5%) via logsumexp: matches oracle's abu(xx, 0.05) better
@@ -2495,11 +1313,6 @@ class Placer:
                 cong_loss = (torch.logsumexp(excess_flat / tau_cong, dim=0) * tau_cong) / top_k
 
             loss = wl_loss + lam_den * den_loss + lam_cong * cong_loss
-            if anchor_t is not None and anchor_weight > 0.0:
-                _anc_frac = min(1.0, frac / max(anchor_decay_frac, 1e-6))
-                _w_anc = anchor_weight * (1.0 - _anc_frac)
-                if _w_anc > 0.0:
-                    loss = loss + _w_anc * ((x_param - anchor_t) ** 2).sum() / (canvas_diag ** 2)
             if x_param.grad is not None:
                 x_param.grad = None
             loss.backward()
@@ -2532,21 +1345,24 @@ class Placer:
                 if t_first > 10.0:
                     break
 
-            # Plateau exit: stop gradient when loss EMA has not improved meaningfully.
-            # Only after 40% of time to avoid premature exit during warm-up phase.
+            # Plateau exit: stop gradient when EMA hasn't improved for 6 consecutive
+            # 50-step windows (window-to-window comparison avoids oscillation resets).
             _loss_val = float(loss.detach())
             if _grad_loss_ema is None:
                 _grad_loss_ema = _loss_val
             else:
                 _grad_loss_ema = 0.99 * _grad_loss_ema + 0.01 * _loss_val
             if step % 50 == 49 and frac > 0.40:
-                _rel_imp = (_grad_loss_ema - _loss_val) / (abs(_grad_loss_ema) + 1e-8)
-                if _rel_imp < 5e-5:
-                    _grad_plateau_steps += 50
-                else:
-                    _grad_plateau_steps = 0
-                if _grad_plateau_steps >= 300:
-                    break
+                if _prev_ema_check is not None:
+                    rel_change = (_prev_ema_check - _grad_loss_ema) / (abs(_prev_ema_check) + 1e-8)
+                    if rel_change < 2e-4:
+                        _plateau_count += 1
+                    else:
+                        _plateau_count = 0
+                    if _plateau_count >= 6:
+                        print(f"[GRAD_PLATEAU_EXIT] step={step} frac={frac:.2f} ema={_grad_loss_ema:.4f}", flush=True)
+                        break
+                _prev_ema_check = _grad_loss_ema
 
         # ── Density overflow pass (ePlace-style Lagrangian update) ───────────
         # After main gradient, measure density overflow. If >15% of cells overflow
@@ -2576,7 +1392,7 @@ class Placer:
                         torch.nn.functional.pad(
                             dens_ov.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                         _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-                _dens_ov_check = dens_ov if soft_bg_den_t is None else dens_ov + soft_bg_den_t
+                _dens_ov_check = dens_ov
                 overflow_frac = float((_dens_ov_check > target_den_final).float().mean())
                 # Surrogate cost before overflow pass (WL + density, no overlap)
                 node_x_bef = pos_ov[safe_t, 0]
@@ -2589,8 +1405,7 @@ class Placer:
                            torch.logsumexp(-nx_min_bef / gamma_end, 1) +
                            torch.logsumexp(ny_max_bef / gamma_end, 1) +
                            torch.logsumexp(-ny_min_bef / gamma_end, 1)) * gamma_end).sum() / hpwl_norm
-                dens_ov_pen = dens_ov if soft_bg_den_t is None else dens_ov + soft_bg_den_t
-                den_bef = torch.logsumexp(dens_ov_pen.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
+                den_bef = torch.logsumexp(dens_ov.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
                 cost_before = float(wl_bef + lam_den_end * den_bef)
                 x_param_snapshot = x_param.data.clone()
 
@@ -2639,9 +1454,7 @@ class Placer:
                             torch.nn.functional.pad(
                                 dens2.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                             _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-                    dens2_penalty = dens2 if soft_bg_den_t is None else dens2 + soft_bg_den_t
-                    dens2_flat = dens2_penalty.view(-1)
-                    den_loss2 = torch.logsumexp(dens2_flat / tau_den_h, 0) * tau_den_h / top_k_den_h
+                    den_loss2 = torch.logsumexp(dens2.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
 
                     loss2 = wl_loss2 + lam_den_boost * den_loss2
                     optimizer2.zero_grad()
@@ -2686,8 +1499,7 @@ class Placer:
                             torch.nn.functional.pad(
                                 dens_af.unsqueeze(0).unsqueeze(0), [_smooth_r] * 4, mode='replicate'),
                             _ks, stride=1, padding=0).squeeze(0).squeeze(0)
-                    dens_af_pen = dens_af if soft_bg_den_t is None else dens_af + soft_bg_den_t
-                    den_af = torch.logsumexp(dens_af_pen.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
+                    den_af = torch.logsumexp(dens_af.view(-1) / tau_den_h, 0) * tau_den_h / top_k_den_h
                     cost_after = float(wl_af + lam_den_end * den_af)
                     if cost_after > cost_before:
                         x_param.data = x_param_snapshot  # revert
@@ -2752,6 +1564,7 @@ class Placer:
                         num_hard, safe_nnp, nnmask, grid_rows, grid_cols, hpwl_norm,
                         deadline, fast_eng=fast_eng, lam_den_override=lam_dens[i],
                         cong_start_frac=cong_start_fracs[i],
+                        lam_cong_override=lam_cong_overrides[i],
                         target_den_start=_tds_i2,
                         lam_den_start_frac=1.0 if _tds_i2 is not None else 0.05)
             import concurrent.futures as _cff
@@ -2764,7 +1577,6 @@ class Placer:
         mov_arr = np.array(movable_idx, dtype=np.int64)
 
         # Build batch tensor: pos has ALL macros (hard+soft), then append ports
-        n_macros = pos_list[0].shape[0]  # num_hard + num_soft
         if n_ports > 0:
             pos_base_np = np.vstack([pos_list[0], port_pos]).astype(np.float32)
         else:
@@ -2795,21 +1607,6 @@ class Placer:
         hw_den = sizes_den_t[:, 0] / 2 + cell_w / 2   # (n_den,)
         hh_den = sizes_den_t[:, 1] / 2 + cell_h / 2
 
-        # Exact oracle-aligned density: cell boundary tensors for box-overlap coverage
-        cell_lx = torch.arange(grid_cols, dtype=torch.float32, device=dev) * cell_w
-        cell_rx = cell_lx + cell_w
-        cell_by = torch.arange(grid_rows, dtype=torch.float32, device=dev) * cell_h
-        cell_ty = cell_by + cell_h
-        _smooth_r_b = int(fast_eng['smooth']) if (fast_eng is not None and 'smooth' in fast_eng) else 0
-
-        # FFT Poisson green's function
-        _kx2 = torch.fft.fftfreq(grid_rows, device=dev).pow(2).unsqueeze(1)
-        _ky2 = torch.fft.rfftfreq(grid_cols, device=dev).pow(2).unsqueeze(0)
-        _k2  = (4 * math.pi ** 2 * (_kx2 + _ky2)).clamp(min=1e-6)
-        phi_green = 1.0 / _k2; phi_green[0, 0] = 0.0
-        _phi_norm = float(phi_green[phi_green > 0].mean().item())
-        if _phi_norm < 1e-12: _phi_norm = 1.0
-
         # Congestion
         cong_enabled = False
         if fast_eng is not None:
@@ -2833,18 +1630,7 @@ class Placer:
         # Per-start λ_den schedule — start at full lam_den (not 0.5×) so density
         # force is strong from step 1, pushing macros to spread before WL clusters them.
         lam_den_starts = torch.tensor(list(lam_dens), device=dev)   # (N,) — full lam_den from start
-        lam_den_ends   = torch.tensor(list(lam_dens), device=dev)   # (N,)
         lam_cong_maxs  = torch.tensor(_lam_cong_maxs, device=dev)   # (N,)
-
-        # ePlace target_den continuation: ramp from low → physical utilization × 1.08.
-        # Ensures macros spread globally first, then cluster by WL.
-        _macro_area_b = float(np.sum(sizes_np[:num_hard, 0] * sizes_np[:num_hard, 1]))
-        _canvas_area_b = float(canvas_w * canvas_h)
-        _td_final_v = float(np.clip(_macro_area_b / max(_canvas_area_b, 1e-9) * 1.08, 0.50, 0.82))
-        _td_starts_vals = [v if v is not None else _td_final_v
-                           for v in (_tds_list[:N] if _tds_list else [None] * N)]
-        td_start_t = torch.tensor(_td_starts_vals, dtype=torch.float32, device=dev)  # (N,)
-        td_final_t = torch.full((N,), _td_final_v, dtype=torch.float32, device=dev)  # (N,)
 
         # DREAMPlace preconditioner (shared across batch)
         _mov_to_k = {idx: k for k, idx in enumerate(movable_idx)}
@@ -2858,7 +1644,7 @@ class Placer:
 
         x_prev = x_batch.data.clone()
         t_start = time.time(); t_total = max(1.0, deadline - t_start)
-        step = 0; t_first = None
+        t_first = None
         BIG = 1e10
 
         while time.time() < deadline:
@@ -2866,7 +1652,7 @@ class Placer:
             frac = min(1.0, (t_s - t_start) / t_total)
             cur_lr = lr_min + 0.5 * (lr - lr_min) * (1.0 + math.cos(math.pi * frac))
             g = gamma_start * (gamma_end / gamma_start) ** frac
-            lam_den = lam_den_starts + (lam_den_ends - lam_den_starts) * frac  # (N,)
+            lam_den = lam_den_starts
 
             # Nesterov lookahead
             with torch.no_grad():
@@ -2975,7 +1761,6 @@ class Placer:
                 x_batch.data[:, :, 1] = x_batch.data[:, :, 1].clamp(
                     min=hh_bnd.unsqueeze(0), max=ch_t - hh_bnd.unsqueeze(0))
 
-            step += 1
             if t_first is None:
                 t_first = time.time() - t_s
                 if t_first > 30.0: break  # too slow, abort batch
@@ -3054,7 +1839,6 @@ class Placer:
         optimizer = torch.optim.Adam([x_param], lr=lr, betas=(0.9, 0.999))
         t_start = time.time()
         t_total = max(1.0, deadline - t_start)
-        step = 0
         t_first = None
 
         # ── Congestion-aware mode (gated on cong_weight > 0 for high-cong benchmarks) ──
@@ -3186,7 +1970,6 @@ class Placer:
                 x_param.data[:, 1] = torch.max(
                     torch.min(x_param.data[:, 1], ch_t - hh_bnd), hh_bnd)
 
-            step += 1
             if t_first is None:
                 t_first = time.time() - t_s
                 if t_first > 10.0:
@@ -3196,229 +1979,6 @@ class Placer:
         with torch.no_grad():
             result[mov_arr] = x_param.data.cpu().numpy().astype(np.float64)
         return result
-
-    # ── Force-directed soft macro placement (Step C) ─────────────────────────
-
-    def _force_directed_soft(self, pos, num_hard, nets_np, net_weights_np,
-                              port_pos, canvas_w, canvas_h, sizes_np, fixed_np):
-        """Optimize soft macro positions via CG solve on the netlist Laplacian.
-
-        Step C from the A-F pipeline: with hard macros fixed, find soft macro
-        positions that minimize quadratic WL. Solves a sparse linear system.
-        Uses star (not clique) net model: each node connects to net centroid
-        with weight w — O(n_pins) per net vs O(n²) for clique.
-        """
-        try:
-            from scipy.sparse import lil_matrix
-            from scipy.sparse.linalg import cg as sp_cg
-        except ImportError:
-            return pos.copy()
-
-        t0_fd = time.time()
-        n_total = pos.shape[0]
-        n_soft = n_total - num_hard
-        if n_soft == 0:
-            return pos.copy()
-
-        soft_movable = [i for i in range(num_hard, n_total) if not fixed_np[i]]
-        if not soft_movable:
-            return pos.copy()
-
-        soft_to_row = {macro_idx: row for row, macro_idx in enumerate(soft_movable)}
-        n_s = len(soft_movable)
-
-        def get_xy(idx):
-            if idx < n_total:
-                return pos[idx, 0], pos[idx, 1]
-            p_idx = idx - n_total
-            if 0 <= p_idx < len(port_pos):
-                return float(port_pos[p_idx, 0]), float(port_pos[p_idx, 1])
-            return 0.0, 0.0
-
-        # Star net model: each node connects to fixed-anchor centroid with weight w.
-        # For a net with k soft + m fixed nodes, soft nodes are pulled toward
-        # the fixed centroid with weight w, and soft-soft pairs attract each other.
-        L_ss_x = lil_matrix((n_s, n_s), dtype=np.float64)
-        L_ss_y = lil_matrix((n_s, n_s), dtype=np.float64)
-        rhs_x  = np.zeros(n_s)
-        rhs_y  = np.zeros(n_s)
-
-        for ni, nodes in enumerate(nets_np):
-            n_nodes = len(nodes)
-            if n_nodes < 2:
-                continue
-            w = float(net_weights_np[ni]) if ni < len(net_weights_np) else 1.0
-            # Separate soft-movable vs fixed pins
-            soft_pins = [int(v) for v in nodes if soft_to_row.get(int(v)) is not None]
-            fixed_pins = [int(v) for v in nodes if soft_to_row.get(int(v)) is None]
-            if not soft_pins:
-                continue
-            edge_w = w / max(1, n_nodes - 1)
-            # Fixed centroid contribution
-            if fixed_pins:
-                fx = np.mean([get_xy(v)[0] for v in fixed_pins])
-                fy = np.mean([get_xy(v)[1] for v in fixed_pins])
-                anchor_w = edge_w * len(fixed_pins)
-                for sp in soft_pins:
-                    r = soft_to_row[sp]
-                    L_ss_x[r, r] += anchor_w
-                    L_ss_y[r, r] += anchor_w
-                    rhs_x[r] += anchor_w * fx
-                    rhs_y[r] += anchor_w * fy
-            # Soft-soft: star model from first soft pin to others — O(n) not O(n²)
-            if len(soft_pins) > 1:
-                ra = soft_to_row[soft_pins[0]]
-                for bi in range(1, len(soft_pins)):
-                    rb = soft_to_row[soft_pins[bi]]
-                    L_ss_x[ra, ra] += edge_w; L_ss_x[rb, rb] += edge_w
-                    L_ss_x[ra, rb] -= edge_w; L_ss_x[rb, ra] -= edge_w
-                    L_ss_y[ra, ra] += edge_w; L_ss_y[rb, rb] += edge_w
-                    L_ss_y[ra, rb] -= edge_w; L_ss_y[rb, ra] -= edge_w
-
-        eps = 1e-6
-        for i in range(n_s):
-            if L_ss_x[i, i] < eps: L_ss_x[i, i] = eps
-            if L_ss_y[i, i] < eps: L_ss_y[i, i] = eps
-
-        L_x = L_ss_x.tocsr()
-        L_y = L_ss_y.tocsr()
-        x0_x = np.array([pos[i, 0] for i in soft_movable])
-        x0_y = np.array([pos[i, 1] for i in soft_movable])
-
-        sol_x, _ = sp_cg(L_x, rhs_x, x0=x0_x, maxiter=200, atol=1e-5)
-        sol_y, _ = sp_cg(L_y, rhs_y, x0=x0_y, maxiter=200, atol=1e-5)
-
-        result = pos.copy()
-        for row_idx, macro_idx in enumerate(soft_movable):
-            w_i, h_i = sizes_np[macro_idx, 0], sizes_np[macro_idx, 1]
-            result[macro_idx, 0] = float(np.clip(sol_x[row_idx], w_i/2, canvas_w - w_i/2))
-            result[macro_idx, 1] = float(np.clip(sol_y[row_idx], h_i/2, canvas_h - h_i/2))
-        return result
-
-    # ── Adaptive optimizer: cache, surrogate, diagnostics ───────────────────
-    @staticmethod
-    def _hparam_cache_path():
-        d = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          ".placement_cache")
-        os.makedirs(d, exist_ok=True)
-        return os.path.join(d, "hparam_cache.json")
-
-    def _load_hparam_cache(self, fingerprint):
-        try:
-            import json
-            path = self._hparam_cache_path()
-            if not os.path.exists(path):
-                return None
-            with open(path, "r") as f:
-                cache = json.load(f)
-            return cache.get(fingerprint)
-        except Exception:
-            return None
-
-    def _save_hparam_cache(self, fingerprint, hparams):
-        try:
-            import json
-            path = self._hparam_cache_path()
-            cache = {}
-            if os.path.exists(path):
-                try:
-                    with open(path, "r") as f:
-                        cache = json.load(f)
-                except Exception:
-                    cache = {}
-            existing = cache.get(fingerprint)
-            # Only overwrite if the new entry is better (lower proxy)
-            if existing is None or hparams.get("proxy", 1e18) < existing.get("proxy", 1e18):
-                cache[fingerprint] = hparams
-                with open(path, "w") as f:
-                    json.dump(cache, f, indent=2)
-        except Exception:
-            pass
-
-    @staticmethod
-    def _fit_surrogate(probe_log):
-        """Fit proxy = a + b*ld + c*lc + d*ld^2 + e*lc^2 + f*ld*lc via lstsq.
-
-        Returns (coeffs, predict_fn) or (None, None) if not enough data.
-        Need ≥6 unique (ld, lc) for the 6-coefficient quadratic.
-        """
-        if len(probe_log) < 6:
-            return None, None
-        ld = np.array([float(p['ld']) for p in probe_log])
-        lc = np.array([float(p['lc']) for p in probe_log])
-        y  = np.array([float(p['proxy']) for p in probe_log])
-        # Skip degenerate rows (NaN/inf)
-        m = np.isfinite(ld) & np.isfinite(lc) & np.isfinite(y) & (y < 100)
-        if m.sum() < 6:
-            return None, None
-        ld, lc, y = ld[m], lc[m], y[m]
-        # Check coverage in (ld, lc) space
-        if np.std(ld) < 0.01 or np.std(lc) < 0.005:
-            return None, None
-        X = np.column_stack([
-            np.ones_like(ld), ld, lc, ld**2, lc**2, ld * lc
-        ])
-        try:
-            coeffs, *_ = np.linalg.lstsq(X, y, rcond=None)
-        except Exception:
-            return None, None
-        if not np.all(np.isfinite(coeffs)):
-            return None, None
-
-        def predict(ld_q, lc_q):
-            return float(coeffs[0] + coeffs[1] * ld_q + coeffs[2] * lc_q
-                         + coeffs[3] * ld_q ** 2 + coeffs[4] * lc_q ** 2
-                         + coeffs[5] * ld_q * lc_q)
-        return coeffs, predict
-
-    @staticmethod
-    def _surrogate_argmin(predict, ld_range=(0.05, 4.0), lc_range=(0.01, 4.0),
-                           grid=20):
-        """Grid-search argmin of surrogate over (ld, lc)."""
-        ld_grid = np.linspace(ld_range[0], ld_range[1], grid)
-        lc_grid = np.linspace(lc_range[0], lc_range[1], grid)
-        best = (None, None, float('inf'))
-        for ld_q in ld_grid:
-            for lc_q in lc_grid:
-                v = predict(ld_q, lc_q)
-                if v < best[2]:
-                    best = (float(ld_q), float(lc_q), v)
-        return best
-
-    @staticmethod
-    def _diagnose_probes(probe_log):
-        """Inspect probe data and return advisory dict.
-
-        Outputs:
-          dominant_axis: 'cong' / 'den' / 'wl' — which component is biggest
-          basin_diversity: std(proxy) across probes
-          cong_floor:    min cong achieved across all probes
-          den_floor:     min den achieved
-          wl_floor:      min wl achieved
-        """
-        if not probe_log:
-            return None
-        wl = np.array([p['wl'] for p in probe_log])
-        de = np.array([p['den'] for p in probe_log])
-        co = np.array([p['cong'] for p in probe_log])
-        pr = np.array([p['proxy'] for p in probe_log])
-        m = np.isfinite(pr) & (pr < 100)
-        if m.sum() == 0:
-            return None
-        wl, de, co, pr = wl[m], de[m], co[m], pr[m]
-        i_best = int(pr.argmin())
-        contribs = {'wl': wl[i_best], 'den': 0.5 * de[i_best],
-                    'cong': 0.5 * co[i_best]}
-        dominant = max(contribs, key=contribs.get)
-        return dict(
-            dominant_axis=dominant,
-            basin_diversity=float(np.std(pr)),
-            cong_floor=float(co.min()),
-            den_floor=float(de.min()),
-            wl_floor=float(wl.min()),
-            best_proxy=float(pr.min()),
-            n_probes=int(len(pr)),
-        )
 
     def _b2b_quadratic_seed(self, pos_init, movable_idx, num_hard, nets_np,
                              net_weights_np, port_pos, sizes_np, canvas_w,
@@ -3562,218 +2122,6 @@ class Placer:
                 cur[idx, 1] = float(np.clip(sol_y[r], h_i / 2, canvas_h - h_i / 2))
 
         return cur
-
-    def _multilevel_seed(self, pos_init, movable_idx, num_hard, nets_np,
-                          net_weights_np, port_pos, sizes_np, canvas_w,
-                          canvas_h, fixed_np, n_clusters=20, n_restarts=8,
-                          spec_modes=None):
-        """Multi-level (V-cycle) placement: cluster macros via spectral kmeans,
-        place CLUSTERS via B2B + random search (only ~20 entities, so we can
-        explore many basins), then expand: each macro lands near its cluster
-        centroid with intra-cluster spectral spread.
-
-        This attacks the topology floor: at coarse scale, the loss landscape
-        has many shallow basins. We enumerate them, pick the best, then
-        uncoarsen. Standard hMETIS+coarse-place+uncoarsen flow used by every
-        analytical placer. Returns best of n_restarts coarse placements.
-        """
-        try:
-            from scipy.sparse import lil_matrix
-            from scipy.sparse.linalg import cg as sp_cg
-        except ImportError:
-            return pos_init.copy()
-
-        hard_movable = [i for i in range(num_hard) if not fixed_np[i]]
-        n_h = len(hard_movable)
-        if n_h < n_clusters * 2:
-            return pos_init.copy()
-        h2row = {idx: r for r, idx in enumerate(hard_movable)}
-
-        # Spectral k-means clustering on movable set.
-        if spec_modes is not None and len(spec_modes) >= 3:
-            embed = np.column_stack([spec_modes[i][:n_h] for i in range(min(4, len(spec_modes)))])
-        else:
-            # Fall back: random-projection embedding
-            embed = np.random.randn(n_h, 4)
-        # normalise
-        embed = (embed - embed.mean(0)) / (embed.std(0) + 1e-9)
-
-        # Simple k-means
-        rng = np.random.default_rng(20260428)
-        centroids = embed[rng.choice(n_h, n_clusters, replace=False)]
-        labels = np.zeros(n_h, dtype=np.int64)
-        for _ in range(15):
-            d = ((embed[:, None, :] - centroids[None, :, :]) ** 2).sum(-1)
-            new_labels = d.argmin(1)
-            if (new_labels == labels).all():
-                break
-            labels = new_labels
-            for k in range(n_clusters):
-                mask = (labels == k)
-                if mask.sum() > 0:
-                    centroids[k] = embed[mask].mean(0)
-
-        # Cluster-level data
-        cluster_macros = [[hard_movable[i] for i in range(n_h) if labels[i] == k]
-                          for k in range(n_clusters)]
-        # Cluster total area (for "size" in coarse layout)
-        cluster_area = np.array([sum(sizes_np[m, 0] * sizes_np[m, 1] for m in macros)
-                                 for macros in cluster_macros])
-        # "Effective half-width" of cluster as super-macro = sqrt(area)
-        cluster_w = np.sqrt(cluster_area + 1e-9)
-        cluster_h = cluster_w.copy()
-
-        # Build cluster-cluster Laplacian (hyperedge clique projection)
-        n_total = pos_init.shape[0]
-
-        def get_pin_cluster(v):
-            """Return cluster id (or -1 if anchor) for a pin."""
-            v = int(v)
-            if v >= n_total:
-                return -1  # port → anchor
-            if v >= num_hard:
-                return -1  # soft macro → anchor (use its position)
-            r = h2row.get(v)
-            if r is None:
-                return -1  # fixed hard macro → anchor
-            return int(labels[r])
-
-        def get_pin_xy(v):
-            v = int(v)
-            if v < n_total:
-                return float(pos_init[v, 0]), float(pos_init[v, 1])
-            pi = v - n_total
-            if 0 <= pi < len(port_pos):
-                return float(port_pos[pi, 0]), float(port_pos[pi, 1])
-            return canvas_w * 0.5, canvas_h * 0.5
-
-        # Precompute net→(clusters_involved, anchor_centroid, anchor_count, weight)
-        net_data = []
-        for ni, nodes in enumerate(nets_np):
-            if len(nodes) < 2:
-                continue
-            w = float(net_weights_np[ni]) if ni < len(net_weights_np) else 1.0
-            cls_set = set()
-            ax, ay, an = 0.0, 0.0, 0
-            for v in nodes:
-                cid = get_pin_cluster(v)
-                if cid < 0:
-                    px, py = get_pin_xy(v)
-                    ax += px; ay += py; an += 1
-                else:
-                    cls_set.add(cid)
-            if len(cls_set) + an < 2:
-                continue
-            cluster_list = sorted(cls_set)
-            edge_w = w / max(1, len(nodes) - 1)
-            net_data.append((cluster_list, ax / max(1, an), ay / max(1, an),
-                              an, edge_w))
-
-        def coarse_b2b(seed_offset):
-            """Solve coarse B2B at cluster level. Returns cluster centroids (K,2)."""
-            rng_local = np.random.default_rng(20260428 + seed_offset)
-            cur_x = rng_local.uniform(0.1, 0.9, n_clusters) * canvas_w
-            cur_y = rng_local.uniform(0.1, 0.9, n_clusters) * canvas_h
-            DELTA = 0.001 * (canvas_w + canvas_h)
-            for _it in range(6):
-                Lx = lil_matrix((n_clusters, n_clusters), dtype=np.float64)
-                Ly = lil_matrix((n_clusters, n_clusters), dtype=np.float64)
-                bx = np.zeros(n_clusters); by = np.zeros(n_clusters)
-                for cluster_list, anc_x, anc_y, an, edge_w in net_data:
-                    pts_x = [cur_x[c] for c in cluster_list]
-                    pts_y = [cur_y[c] for c in cluster_list]
-                    if an > 0:
-                        pts_x.append(anc_x); pts_y.append(anc_y)
-                    pts_x = np.array(pts_x); pts_y = np.array(pts_y)
-                    n_p = len(pts_x)
-                    if n_p < 2:
-                        continue
-                    # Bound pins per axis
-                    for axis, pts, L, b in (('x', pts_x, Lx, bx),
-                                            ('y', pts_y, Ly, by)):
-                        i_lo = int(pts.argmin()); i_hi = int(pts.argmax())
-                        for j in range(n_p):
-                            for k_other in (i_lo, i_hi):
-                                if j == k_other:
-                                    continue
-                                d = max(DELTA, abs(pts[j] - pts[k_other]))
-                                sw = edge_w / d
-                                # j and k_other might each be cluster or anchor.
-                                # In our list, indices [0..len(cluster_list)-1] are clusters;
-                                # if an>0, index len(cluster_list) is anchor.
-                                cj = cluster_list[j] if j < len(cluster_list) else None
-                                ck = cluster_list[k_other] if k_other < len(cluster_list) else None
-                                if cj is None and ck is None:
-                                    continue
-                                if cj is not None and ck is not None:
-                                    L[cj, cj] += sw; L[ck, ck] += sw
-                                    L[cj, ck] -= sw; L[ck, cj] -= sw
-                                elif cj is not None:
-                                    L[cj, cj] += sw
-                                    b[cj] += sw * pts[k_other]
-                                else:
-                                    L[ck, ck] += sw
-                                    b[ck] += sw * pts[j]
-                # area-proportional regularization to anchor center (avoids drift)
-                reg = 1e-2
-                for k in range(n_clusters):
-                    Lx[k, k] += reg; Ly[k, k] += reg
-                    bx[k] += reg * canvas_w * 0.5
-                    by[k] += reg * canvas_h * 0.5
-                Lx_c = Lx.tocsr(); Ly_c = Ly.tocsr()
-                cur_x, _ = sp_cg(Lx_c, bx, x0=cur_x, maxiter=80, atol=1e-5)
-                cur_y, _ = sp_cg(Ly_c, by, x0=cur_y, maxiter=80, atol=1e-5)
-                # clamp
-                cur_x = np.clip(cur_x, cluster_w * 0.5, canvas_w - cluster_w * 0.5)
-                cur_y = np.clip(cur_y, cluster_h * 0.5, canvas_h - cluster_h * 0.5)
-            return cur_x, cur_y
-
-        def coarse_cost(cur_x, cur_y):
-            """Approx HPWL at cluster level."""
-            wl = 0.0
-            for cluster_list, anc_x, anc_y, an, edge_w in net_data:
-                xs = [cur_x[c] for c in cluster_list]
-                ys = [cur_y[c] for c in cluster_list]
-                if an > 0:
-                    xs.append(anc_x); ys.append(anc_y)
-                wl += edge_w * ((max(xs) - min(xs)) + (max(ys) - min(ys)))
-            return wl
-
-        # Try n_restarts → pick best
-        best_cx, best_cy, best_cc = None, None, float('inf')
-        for r in range(n_restarts):
-            try:
-                cx_r, cy_r = coarse_b2b(r)
-                cc = coarse_cost(cx_r, cy_r)
-                if cc < best_cc:
-                    best_cc = cc; best_cx = cx_r; best_cy = cy_r
-            except Exception:
-                continue
-        if best_cx is None:
-            return pos_init.copy()
-
-        # Uncoarsen: place each macro at cluster centroid + small intra-cluster spread
-        out = pos_init.copy()
-        for k in range(n_clusters):
-            members = cluster_macros[k]
-            if not members:
-                continue
-            # arrange members in a grid around (cx[k], cy[k])
-            n_m = len(members)
-            cols = max(1, int(np.ceil(np.sqrt(n_m))))
-            rows = max(1, int(np.ceil(n_m / cols)))
-            cw = max(sizes_np[m, 0] for m in members) * 1.05
-            ch = max(sizes_np[m, 1] for m in members) * 1.05
-            cx0 = best_cx[k] - (cols - 1) * 0.5 * cw
-            cy0 = best_cy[k] - (rows - 1) * 0.5 * ch
-            for mi, mid in enumerate(members):
-                w_i, h_i = sizes_np[mid, 0], sizes_np[mid, 1]
-                rr = mi // cols; cc2 = mi % cols
-                px = cx0 + cc2 * cw
-                py = cy0 + rr * ch
-                out[mid, 0] = float(np.clip(px, w_i / 2, canvas_w - w_i / 2))
-                out[mid, 1] = float(np.clip(py, h_i / 2, canvas_h - h_i / 2))
-        return out
 
     @staticmethod
     def _b2b_add_edge(L, b, h2row, u, v, cu, cv, sw):
@@ -3999,258 +2347,6 @@ class Placer:
         best_pos = self._resolve(best_pos, num_hard, sizes, canvas_w, canvas_h, fixed_np, max_iter=500)
         return best_pos
 
-    # ── GPU parallel tempering SA ─────────────────────────────────────────────
-
-    def _gpu_parallel_sa(self, pos, movable_idx, sizes_np, port_pos,
-                         canvas_w, canvas_h, num_hard, safe_nnp, nnmask,
-                         grid_rows, grid_cols, hpwl_norm, deadline,
-                         fast_eng=None, lam_den=0.5, lam_cong=0.3, K=32,
-                         pos_starts=None):
-        """K-chain parallel tempering SA on GPU with batched surrogate cost.
-        Each chain explores independently; adjacent chains swap configurations
-        periodically (replica exchange). Returns best found numpy position.
-
-        pos_starts (optional): list of np.ndarray, each (n_macros, 2). When
-        provided, the K chains are distributed round-robin across these seeds
-        so SA explores multiple basins instead of K-noisy-copies of one start.
-        Falls back to single-seed behaviour when None.
-        """
-        dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if dev.type != 'cuda' or K <= 1:
-            return pos  # fallback: nothing to do in parallel
-
-        n_mov = len(movable_idx)
-        n_ports = port_pos.shape[0]
-        n_macros = pos.shape[0]
-        n_total = n_macros + n_ports
-        mov_arr = np.array(movable_idx, dtype=np.int64)
-        mov_arr_t = torch.from_numpy(mov_arr).to(dev)
-
-        # Build base position tensors (macros + ports). When pos_starts is set,
-        # each seed gets its own base; chain k pulls from seeds[k % S].
-        if pos_starts is None or len(pos_starts) <= 1: 
-            seeds = [pos]
-        else:
-            seeds = list(pos_starts)
-        S = len(seeds)
-        bases_np = []
-        for s in seeds:
-            if n_ports > 0:
-                bases_np.append(np.vstack([s, port_pos]).astype(np.float32))
-            else:
-                bases_np.append(s.astype(np.float32))
-        bases_t = torch.from_numpy(np.stack(bases_np, axis=0)).to(dev)  # (S, n_total, 2)
-        # Backwards-compat alias used downstream where a single base was assumed.
-        base_t = bases_t[0]
-
-        # Bounds for movable macros
-        hw_bnd = torch.from_numpy(sizes_np[mov_arr, 0].astype(np.float32)).to(dev) / 2  # (n_mov,)
-        hh_bnd = torch.from_numpy(sizes_np[mov_arr, 1].astype(np.float32)).to(dev) / 2
-
-        # Initialize K chains. Round-robin assign seeds, then add increasing noise.
-        seed_idx = torch.arange(K, device=dev) % S  # (K,) maps chain->seed
-        # Movable positions per chain pulled from its assigned seed.
-        x_init = bases_t[seed_idx][:, mov_arr_t, :].clone()  # (K, n_mov, 2)
-        noise_scales = torch.linspace(0.0, 0.12, K, device=dev)  # 0 to 12% canvas
-        noise = torch.randn(K, n_mov, 2, device=dev) * noise_scales.unsqueeze(1).unsqueeze(2)
-        noise[:, :, 0] *= canvas_w; noise[:, :, 1] *= canvas_h
-        x_init = x_init + noise
-        x_init[:, :, 0] = x_init[:, :, 0].clamp(hw_bnd.unsqueeze(0), canvas_w - hw_bnd.unsqueeze(0))
-        x_init[:, :, 1] = x_init[:, :, 1].clamp(hh_bnd.unsqueeze(0), canvas_h - hh_bnd.unsqueeze(0))
-
-        # Parallel tempering temperatures: geometric schedule T_min..T_max
-        T_min, T_max = 0.002, 0.12
-        temps = torch.exp(torch.linspace(math.log(T_min), math.log(T_max), K, device=dev))
-
-        # Net tensors for WL
-        safe_t  = torch.from_numpy(safe_nnp.astype(np.int64)).to(dev)  # (n_nets, max_nsz)
-        mask_t  = torch.from_numpy(nnmask).to(dev)
-        n_nets, max_nsz = safe_nnp.shape
-        gamma = (canvas_w + canvas_h) * 0.008  # logsumexp sharpness
-
-        # Density tensors
-        cell_w = canvas_w / grid_cols; cell_h = canvas_h / grid_rows
-        cx_t = torch.arange(grid_cols, dtype=torch.float32, device=dev) * cell_w + cell_w / 2
-        cy_t = torch.arange(grid_rows, dtype=torch.float32, device=dev) * cell_h + cell_h / 2
-        n_den = num_hard
-        sizes_den_t = torch.from_numpy(sizes_np[:n_den].astype(np.float32)).to(dev)
-        hw_den = sizes_den_t[:, 0] / 2 + cell_w / 2
-        hh_den = sizes_den_t[:, 1] / 2 + cell_h / 2
-        tau_den = max(1.0, grid_rows * grid_cols * 0.10)
-        BIG = 1e9
-        # Exact oracle-aligned density for surrogate SA cost
-        cell_lx_sa = torch.arange(grid_cols, dtype=torch.float32, device=dev) * cell_w
-        cell_rx_sa = cell_lx_sa + cell_w
-        cell_by_sa = torch.arange(grid_rows, dtype=torch.float32, device=dev) * cell_h
-        cell_ty_sa = cell_by_sa + cell_h
-        _smooth_r_sa = int(fast_eng['smooth']) if (fast_eng is not None and 'smooth' in fast_eng) else 0
-
-        # Congestion engine (skip if too large or unavailable)
-        cong_ok = False
-        if fast_eng is not None and lam_cong > 0:
-            n_pairs = len(fast_eng['src'])
-            if n_pairs < 500_000:
-                gw = canvas_w / grid_cols; gh = canvas_h / grid_rows
-                h_cap = gh * float(fast_eng['hpm']); v_cap = gw * float(fast_eng['vpm'])
-                cong_ok = (h_cap > 1e-9 and v_cap > 1e-9)
-                if cong_ok:
-                    src_ct = torch.from_numpy(fast_eng['src'].astype(np.int64)).to(dev)
-                    snk_ct = torch.from_numpy(fast_eng['snk'].astype(np.int64)).to(dev)
-                    w_ct   = torch.from_numpy(fast_eng['w'].astype(np.float32)).to(dev)
-                    H_stride = grid_rows * (grid_cols + 1)
-                    V_stride = (grid_rows + 1) * grid_cols
-                    K_range  = torch.arange(K, device=dev).unsqueeze(1)  # (K, 1)
-                    top_k_c  = max(1, int(grid_rows * grid_cols * 0.05))
-                    w_rep    = w_ct.unsqueeze(0).expand(K, -1)  # (K, n_pairs)
-
-        def batched_cost(x_batch):
-            # x_batch: (K, n_mov, 2) — movable positions only
-            # Build full position tensors
-            pos_full = base_t.unsqueeze(0).expand(K, -1, -1).clone()
-            pos_full[:, mov_arr_t] = x_batch
-
-            # WL
-            node_x = pos_full[:, safe_t, 0]  # (K, n_nets, max_nsz)
-            node_y = pos_full[:, safe_t, 1]
-            mask_e = mask_t.unsqueeze(0).expand(K, -1, -1)
-            nx_max = torch.where(mask_e, node_x, torch.full_like(node_x, -BIG))
-            nx_min = torch.where(mask_e, node_x, torch.full_like(node_x,  BIG))
-            ny_max = torch.where(mask_e, node_y, torch.full_like(node_y, -BIG))
-            ny_min = torch.where(mask_e, node_y, torch.full_like(node_y,  BIG))
-            wl = ((torch.logsumexp(nx_max / gamma, 2) + torch.logsumexp(-nx_min / gamma, 2) +
-                   torch.logsumexp(ny_max / gamma, 2) + torch.logsumexp(-ny_min / gamma, 2))
-                  * gamma).sum(1) / hpwl_norm  # (K,)
-
-            # Density: exact oracle-aligned box-overlap coverage
-            mx = pos_full[:, :n_den, 0]  # (K, n_den)
-            my = pos_full[:, :n_den, 1]
-            left_x_k  = mx - sizes_den_t[:, 0].unsqueeze(0) / 2
-            right_x_k = mx + sizes_den_t[:, 0].unsqueeze(0) / 2
-            bot_y_k   = my - sizes_den_t[:, 1].unsqueeze(0) / 2
-            top_y_k   = my + sizes_den_t[:, 1].unsqueeze(0) / 2
-            cov_x_k = torch.clamp(
-                torch.minimum(right_x_k.unsqueeze(2), cell_rx_sa.unsqueeze(0).unsqueeze(0)) -
-                torch.maximum(left_x_k.unsqueeze(2),  cell_lx_sa.unsqueeze(0).unsqueeze(0)),
-                min=0.0) / cell_w  # (K, n_den, grid_cols)
-            cov_y_k = torch.clamp(
-                torch.minimum(top_y_k.unsqueeze(2),   cell_ty_sa.unsqueeze(0).unsqueeze(0)) -
-                torch.maximum(bot_y_k.unsqueeze(2),   cell_by_sa.unsqueeze(0).unsqueeze(0)),
-                min=0.0) / cell_h  # (K, n_den, grid_rows)
-            density = torch.einsum('kic,kir->krc', cov_x_k, cov_y_k)  # (K, R, C)
-            if _smooth_r_sa > 0:
-                _ks_sa = 2 * _smooth_r_sa + 1
-                density = torch.nn.functional.avg_pool2d(
-                    torch.nn.functional.pad(density.unsqueeze(1), [_smooth_r_sa]*4, mode='replicate'),
-                    _ks_sa, stride=1, padding=0).squeeze(1)  # (K, R, C)
-            den = (torch.logsumexp(density.view(K, -1) / tau_den, 1) * tau_den
-                   / max(1, int(grid_rows * grid_cols * 0.10)))  # (K,)
-
-            # Congestion (batched scatter_add_)
-            cong = torch.zeros(K, device=dev)
-            if cong_ok:
-                xs = pos_full[:, src_ct, 0]; ys = pos_full[:, src_ct, 1]
-                xt = pos_full[:, snk_ct, 0]; yt = pos_full[:, snk_ct, 1]
-                sr_k = (ys / gh).long().clamp(0, grid_rows - 1)
-                sc_k = (xs / gw).long().clamp(0, grid_cols - 1)
-                kr_k = (yt / gh).long().clamp(0, grid_rows - 1)
-                kc_k = (xt / gw).long().clamp(0, grid_cols - 1)
-                col_lo = torch.minimum(sc_k, kc_k); col_hi = torch.maximum(sc_k, kc_k)
-                row_lo = torch.minimum(sr_k, kr_k); row_hi = torch.maximum(sr_k, kr_k)
-                # H routing
-                lin_lo_H = (K_range * H_stride + sr_k * (grid_cols + 1) + col_lo).clamp(0, K * H_stride - 1)
-                lin_hi_H = (K_range * H_stride + sr_k * (grid_cols + 1) + col_hi).clamp(0, K * H_stride - 1)
-                H_flat = torch.zeros(K * H_stride, device=dev)
-                H_flat.scatter_add_(0, lin_lo_H.reshape(-1), w_rep.reshape(-1))
-                H_flat.scatter_add_(0, lin_hi_H.reshape(-1), -w_rep.reshape(-1))
-                H = H_flat.view(K, grid_rows, grid_cols + 1)[:, :, :-1].cumsum(2) / h_cap
-                # V routing
-                lin_lo_V = (K_range * V_stride + row_lo * grid_cols + kc_k).clamp(0, K * V_stride - 1)
-                lin_hi_V = (K_range * V_stride + row_hi * grid_cols + kc_k).clamp(0, K * V_stride - 1)
-                V_flat = torch.zeros(K * V_stride, device=dev)
-                V_flat.scatter_add_(0, lin_lo_V.reshape(-1), w_rep.reshape(-1))
-                V_flat.scatter_add_(0, lin_hi_V.reshape(-1), -w_rep.reshape(-1))
-                V2 = V_flat.view(K, grid_rows + 1, grid_cols)[:, :-1, :].cumsum(1) / v_cap
-                comb = (H + V2).view(K, -1)
-                cong = torch.topk(comb, top_k_c, dim=1).values.mean(1)
-
-            return wl + lam_den * den + lam_cong * cong  # (K,)
-
-        x_cur = x_init.clone()
-        with torch.no_grad():
-            cost_cur = batched_cost(x_cur)
-        best_k = cost_cur.argmin().item()
-        best_cost = cost_cur[best_k].item()
-        best_x = x_cur[best_k].clone()
-
-        k_arange = torch.arange(K, device=dev)
-        step_scale = (canvas_w + canvas_h) * 0.05
-        t_start = time.time()
-
-        step = 0
-        _sa_best_at_step = best_cost
-        _sa_stagnation = 0
-        _sa_stagnation_limit = max(2000, n_mov * 20)  # scale with problem size
-        while time.time() < deadline - 0.5:
-            frac = min(1.0, (time.time() - t_start) / max(1.0, deadline - 0.5 - t_start))
-            s = step_scale * max(0.05, 1.0 - frac * 0.85)
-
-            # Each chain moves a (possibly different) random macro
-            macro_batch = torch.randint(n_mov, (K,), device=dev)
-            real_idx_b  = mov_arr_t[macro_batch]  # (K,) global macro indices
-            hw_b = hw_bnd[macro_batch]  # (K,)
-            hh_b = hh_bnd[macro_batch]
-
-            delta = torch.randn(K, 2, device=dev) * s
-            delta[:, 0].clamp_(-canvas_w * 0.5, canvas_w * 0.5)
-            delta[:, 1].clamp_(-canvas_h * 0.5, canvas_h * 0.5)
-
-            cand = x_cur.clone()
-            cur_x_b = x_cur[k_arange, macro_batch, 0]
-            cur_y_b = x_cur[k_arange, macro_batch, 1]
-            cand[k_arange, macro_batch, 0] = (cur_x_b + delta[:, 0]).clamp(hw_b, canvas_w - hw_b)
-            cand[k_arange, macro_batch, 1] = (cur_y_b + delta[:, 1]).clamp(hh_b, canvas_h - hh_b)
-
-            with torch.no_grad():
-                cost_cand = batched_cost(cand)
-
-            d_cost = cost_cand - cost_cur
-            log_acc = (-d_cost / temps).clamp(max=0.0)
-            accept = (d_cost < 0) | (torch.rand(K, device=dev).log() < log_acc)
-            x_cur   = torch.where(accept.unsqueeze(1).unsqueeze(2), cand, x_cur)
-            cost_cur = torch.where(accept, cost_cand, cost_cur)
-
-            # Track global best
-            bk = cost_cur.argmin().item()
-            if cost_cur[bk].item() < best_cost:
-                best_cost = cost_cur[bk].item()
-                best_x = x_cur[bk].clone()
-
-            # Parallel tempering swap (every 50 steps)
-            if step % 50 == 49:
-                for i in range(0, K - 1, 2):
-                    swap_log = ((cost_cur[i] - cost_cur[i+1]) *
-                                (1.0 / temps[i] - 1.0 / temps[i+1]))
-                    if torch.rand(1, device=dev).log() < swap_log.clamp(max=0.0):
-                        x_cur[[i, i+1]]    = x_cur[[i+1, i]].clone()
-                        cost_cur[[i, i+1]] = cost_cur[[i+1, i]].clone()
-
-            # Convergence exit: stop when best has not improved for a long stretch
-            if step % 500 == 499:
-                if best_cost < _sa_best_at_step - 1e-5:
-                    _sa_best_at_step = best_cost
-                    _sa_stagnation = 0
-                else:
-                    _sa_stagnation += 500
-                if _sa_stagnation >= _sa_stagnation_limit and frac > 0.4:
-                    break
-
-            step += 1
-
-        # Convert best GPU result back to numpy
-        result = pos.copy()
-        result[mov_arr] = best_x.cpu().numpy().astype(np.float64)
-        return result
-
     # ── Utilities ─────────────────────────────────────────────────────────────
 
     def _local_resolve(self, pos, moved_indices, num_hard, sizes, canvas_w, canvas_h, fixed, max_iter=120):
@@ -4374,135 +2470,6 @@ class Placer:
     def _all_pos(self, pos, port_pos):
         return np.vstack([pos,port_pos]) if port_pos.shape[0]>0 else pos
 
-    def _spectral_start(self, pos_init, movable_idx, sizes, nets_np, net_weights_np,
-                         num_hard, canvas_w, canvas_h, fixed_np, deadline):
-        """Perturb along the 1st nontrivial eigenvector of the macro Laplacian.
-
-        The first spectral mode captures the primary bisection of the netlist —
-        the structurally most-different direction from initial.plc. Sampling along
-        this direction explores topology changes that are connectivity-coherent,
-        unlike pure Gaussian noise.
-        Returns None if scipy unavailable or matrix build too slow.
-        """
-        try:
-            from scipy.sparse import csr_matrix
-            from scipy.sparse.linalg import eigsh
-        except ImportError:
-            return None
-
-        n_mov = len(movable_idx)
-        if n_mov < 2 or time.time() > deadline - 10:
-            return None
-
-        # Build sparse Laplacian over movable hard macros
-        idx_map = {idx: k for k, idx in enumerate(movable_idx)}
-        rows, cols, vals = [], [], []
-        for ni, nodes in enumerate(nets_np):
-            hards = [idx_map[int(v)] for v in nodes if idx_map.get(int(v)) is not None]
-            if len(hards) < 2:
-                continue
-            w = float(net_weights_np[ni]) if ni < len(net_weights_np) else 1.0
-            ew = w / max(1, len(hards) - 1)
-            for i in range(len(hards)):
-                for j in range(i + 1, len(hards)):
-                    rows += [hards[i], hards[j], hards[i], hards[j]]
-                    cols += [hards[j], hards[i], hards[i], hards[j]]
-                    vals += [-ew, -ew, ew, ew]
-
-        if not rows:
-            return None
-
-        L = csr_matrix((vals, (rows, cols)), shape=(n_mov, n_mov))
-        try:
-            # Use a random mode from the top-4 non-trivial eigenvectors for diversity.
-            n_modes = min(4, n_mov - 1)
-            _, vecs = eigsh(L, k=n_modes + 1, which='SM', tol=1e-3, maxiter=500)
-            mode_idx = random.randint(1, n_modes)
-            v1 = np.real(vecs[:, mode_idx])
-            v1 = v1 / (np.std(v1) + 1e-9)
-        except Exception:
-            return None
-
-        amplitude = (canvas_w + canvas_h) * 0.20
-        sign = 1.0 if random.random() < 0.5 else -1.0
-        axis = random.randint(0, 1)  # perturb x or y
-        p = pos_init.copy()
-        for k, idx in enumerate(movable_idx):
-            if k >= len(v1):
-                break
-            w, h = sizes[idx, 0], sizes[idx, 1]
-            delta = sign * amplitude * v1[k]
-            if axis == 0:
-                p[idx, 0] = np.clip(pos_init[idx, 0] + delta, w / 2, canvas_w - w / 2)
-            else:
-                p[idx, 1] = np.clip(pos_init[idx, 1] + delta, h / 2, canvas_h - h / 2)
-        return p
-
-    def _random_start(self, pos_init, movable_idx, sizes, canvas_w, canvas_h, fixed_np):
-        """Quadrant-shuffle placement: divide canvas into 4 quadrants, shuffle which
-        macro group goes where. Gives topology diversity while staying partially legal.
-        Each macro is placed uniformly within its destination quadrant."""
-        p = pos_init.copy()
-        n_mov = len(movable_idx)
-        if n_mov == 0:
-            return p
-
-        cx, cy = canvas_w / 2, canvas_h / 2
-        # Assign movable macros to their current quadrant
-        quads: list[list[int]] = [[], [], [], []]
-        for idx in movable_idx:
-            x, y = pos_init[idx, 0], pos_init[idx, 1]
-            q = (1 if x > cx else 0) + (2 if y > cy else 0)
-            quads[q].append(idx)
-
-        # Shuffle which source quadrant maps to which destination
-        quad_order = list(range(4))
-        random.shuffle(quad_order)
-
-        quad_bounds = [
-            (0.0, 0.0, cx, cy),
-            (cx, 0.0, canvas_w, cy),
-            (0.0, cy, cx, canvas_h),
-            (cx, cy, canvas_w, canvas_h),
-        ]
-
-        for src_q, dst_q in enumerate(quad_order):
-            xlo, ylo, xhi, yhi = quad_bounds[dst_q]
-            for idx in quads[src_q]:
-                w, h = sizes[idx, 0], sizes[idx, 1]
-                xl = xlo + w / 2; xr = xhi - w / 2
-                yl = ylo + h / 2; yr = yhi - h / 2
-                if xl >= xr: nx = (xlo + xhi) / 2
-                else: nx = np.random.uniform(xl, xr)
-                if yl >= yr: ny = (ylo + yhi) / 2
-                else: ny = np.random.uniform(yl, yr)
-                p[idx, 0] = np.clip(nx, w / 2, canvas_w - w / 2)
-                p[idx, 1] = np.clip(ny, h / 2, canvas_h - h / 2)
-        return p
-
-    def _spectral_sorted_placement(self, pos_init, movable_idx, sizes, vx, vy,
-                                    num_hard, canvas_w, canvas_h, fixed_np):
-        """Rank-based spectral placement: sort macros by eigenvector rank, assign
-        uniformly-spaced x from vx-rank and y from vy-rank. Preserves spectral
-        connectivity ordering without density explosion (rank = uniform spread)."""
-        p = pos_init.copy()
-        n_mov = len(movable_idx)
-        if n_mov < 3:
-            return p
-        vx_order = np.argsort(vx[:n_mov])
-        vy_order = np.argsort(vy[:n_mov])
-        for rank, k in enumerate(vx_order):
-            idx = movable_idx[k]
-            w_s = sizes[idx, 0]
-            x = (rank + 0.5) / n_mov * canvas_w
-            p[idx, 0] = float(np.clip(x, w_s / 2, canvas_w - w_s / 2))
-        for rank, k in enumerate(vy_order):
-            idx = movable_idx[k]
-            h_s = sizes[idx, 1]
-            y = (rank + 0.5) / n_mov * canvas_h
-            p[idx, 1] = float(np.clip(y, h_s / 2, canvas_h - h_s / 2))
-        return p
-
     def _perturb(self, pos, movable_idx, sizes, canvas_w, canvas_h, noise):
         p=pos.copy()
         if noise<=0: return p
@@ -4534,16 +2501,6 @@ class Placer:
                     oy=max(0.,min(ry_m,(r+1)*cell_h)-max(ly_m,r*cell_h))
                     dens[r,c]+=(ox*oy)/cell_a
         return dens
-
-    def _add_macro_to_dens(self,dens,xi,yi,wi,hi,cell_w,cell_h,grid_rows,grid_cols,cell_a,sign=1.):
-        lx_m=xi-wi/2; rx_m=xi+wi/2; ly_m=yi-hi/2; ry_m=yi+hi/2
-        c_lo=max(0,int(lx_m/cell_w)); c_hi=min(grid_cols-1,int(rx_m/cell_w))
-        r_lo=max(0,int(ly_m/cell_h)); r_hi=min(grid_rows-1,int(ry_m/cell_h))
-        for r in range(r_lo,r_hi+1):
-            for c in range(c_lo,c_hi+1):
-                ox=max(0.,min(rx_m,(c+1)*cell_w)-max(lx_m,c*cell_w))
-                oy=max(0.,min(ry_m,(r+1)*cell_h)-max(ly_m,r*cell_h))
-                dens[r,c]+=sign*(ox*oy)/cell_a
 
     @staticmethod
     def _top_k_mean(grid, frac):

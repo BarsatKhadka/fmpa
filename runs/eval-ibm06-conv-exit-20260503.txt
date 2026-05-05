@@ -1,0 +1,23 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm06... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm06\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm06/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[PHASE0_DONE] t=74.6s best=2.6493 top5=[('init.plc', np.float64(2.6493)), ('rand', np.float64(3.3344)), ('rand', np.float64(3.3358)), ('rand', np.float64(3.3672)), ('rand', np.float64(3.4323))]
+[PH1_SKIP] t=74.6s best_cheap=2.6493
+[DIAG] pre-SA oracle: proxy=1.6619  den=0.730  cong=2.466
+[PH2_ENTER] oracle_calls_possible=23 oracle_call_secs=7.0
+[ORA_SA_SLOT 0] cost=1.6631 best=1.6619 t=251s
+[SOFT_REOPT] den_only oracle: 1.5478  (prev: 1.6619)
+proxy=1.5478  (wl=0.063 den=0.613 cong=2.357)  VALID  [292.24s]

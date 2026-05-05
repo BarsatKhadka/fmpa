@@ -1,0 +1,26 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm13... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm13\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 43, Row: 43
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm13/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 43, Row: 43
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[PHASE0_DONE] t=287.6s best=2.2692 top5=[('b2b-4-ports_soft-random', np.float64(2.2692)), ('b2b-3-ports_soft-corners', np.float64(2.3136)), ('b2b-2-ports_soft-random', np.float64(2.3208)), ('b2b-0-ports_soft-center', np.float64(2.3381)), ('b2b-1-ports_only-center', np.float64(2.5309))]
+[PH1_SKIP] t=287.6s best_cheap=2.2692
+[DIAG] pre-SA oracle: proxy=1.3854  den=0.891  cong=1.773
+[PH2_ENTER] oracle_calls_possible=92 oracle_call_secs=31.1
+[ORA_SA_SLOT 0] cost=1.3854 best=1.3854 t=854s
+[ORA_SA_SLOT 1] cost=1.5801 best=1.3854 t=1207s
+[ORA_SA_SLOT 2] cost=1.6117 best=1.3854 t=1545s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=3
+[SOFT_REOPT] cong_w=2 oracle: 1.2464  (prev: 1.3854)
+proxy=1.2464  (wl=0.054 den=0.661 cong=1.724)  VALID  [1692.14s]
