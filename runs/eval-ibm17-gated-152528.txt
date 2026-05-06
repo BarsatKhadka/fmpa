@@ -1,0 +1,32 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm17... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm17\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm17/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=24.7s n_topo=12 N_PAR=16 max_topo=192 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3122.8889 (wl=0.066 den=0.883 cong=3.673 ov=15.6027)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3578.1922 (wl=0.074 den=0.917 cong=5.699 ov=17.8741)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2701.6587 (wl=0.066 den=0.860 cong=3.590 ov=13.4968)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=1929.3435 (wl=0.067 den=0.841 cong=3.518 ov=9.6355)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2982.8674 (wl=0.066 den=0.878 cong=3.645 ov=14.9027)
+[PHASE0_DONE] t=305.0s best=2.2132 top5=[('init.plc', np.float64(2.2132)), ('rand', np.float64(2.6873)), ('rand', np.float64(2.765)), ('rand', np.float64(2.7835)), ('rand', np.float64(2.796))]
+[PH1_SKIP] t=305.1s best_cheap=2.2132
+[DIAG] pre-SA oracle: proxy=1.7395  den=0.946  cong=2.426
+[PH2_ENTER] oracle_calls_possible=4 oracle_call_secs=368.7
+[SEED_ORACLE_SPREAD] n=6 best=1.7395 worst=2.1580 spread=0.4184 all=[1.7395, 1.7398, 2.1137, 2.1154, 2.1419, 2.158]
+[ORA_SA_SLOT 0] cost=1.7395 best=1.7395 t=2102s
+[ORA_SA_SLOT 1] cost=1.7398 best=1.7395 t=2420s
+[ORA_SA_SLOT 2] cost=2.1137 best=1.7395 t=2628s
+[JOINT_REOPT] cong_w=2 oracle: 1.6313  (prev: 1.7395)  ov_pre=0.1801 ov_post=0.0000
+proxy=1.6351  (wl=0.055 den=0.690 cong=2.470)  VALID  [2977.40s]

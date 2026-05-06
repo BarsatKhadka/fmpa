@@ -1,0 +1,67 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm01... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm01\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=14.0s n_topo=21 N_PAR=16 max_topo=336 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=1.9334 (wl=0.072 den=1.000 cong=2.723 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=1043.6916 (wl=0.075 den=1.052 cong=2.964 ov=5.2080)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=927.9973 (wl=0.072 den=1.047 cong=2.704 ov=4.6302)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=909.0781 (wl=0.072 den=1.047 cong=2.668 ov=4.5357)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=918.3594 (wl=0.072 den=1.048 cong=2.639 ov=4.5822)
+[PHASE0_DONE] t=297.3s best=1.8857 top5=[('b2b-4-ports_soft-random', np.float64(1.8857)), ('init.plc', np.float64(1.9284)), ('b2b-0-ports_soft-center', np.float64(1.9334)), ('b2b-2-ports_soft-random', np.float64(698.2467)), ('b2b-3-ports_soft-corners', np.float64(825.9487))]
+[PH1_SKIP] t=297.3s best_cheap=1.8857
+[DIAG] pre-SA oracle: proxy=1.0385  den=0.812  cong=1.137
+[PH2_ENTER] oracle_calls_possible=1684 oracle_call_secs=1.8
+[SEED_ORACLE_SPREAD] n=6 best=1.0385 worst=1.2610 spread=0.2225 all=[1.0385, 1.0385, 1.1548, 1.2031, 1.2311, 1.261]
+[SLOT_CONV] step=74 stall=134s thr=133s best=1.0385
+[ORA_SA_SLOT 0] cost=1.0385 best=1.0385 t=448s
+[SLOT_CONV] step=56 stall=134s thr=133s best=1.0385
+[ORA_SA_SLOT 1] cost=1.0385 best=1.0385 t=584s
+[ORA_SA_CONTINUE] si=2 2 non-improving, known seeds remain
+[SLOT_CONV] step=55 stall=133s thr=133s best=1.1548
+[ORA_SA_SLOT 2] cost=1.1548 best=1.0385 t=719s
+[ORA_SA_CONTINUE] si=3 3 non-improving, known seeds remain
+[ORA_SA_SLOT 3] cost=1.1602 best=1.0385 t=986s
+[ORA_SA_CONTINUE] si=4 4 non-improving, known seeds remain
+[SLOT_CONV] step=189 stall=134s thr=133s best=1.1562
+[ORA_SA_SLOT 4] cost=1.1538 best=1.0385 t=1212s
+[ORA_SA_CONTINUE] si=5 5 non-improving, 2040s budget
+[SLOT_CONV] step=120 stall=133s thr=133s best=1.1905
+[ORA_SA_SLOT 5] cost=1.1988 best=1.0385 t=1359s
+[ORA_SA_CONTINUE] si=6 6 non-improving, 1893s budget
+[SLOT_CONV] step=89 stall=134s thr=133s best=1.0552
+[ORA_SA_SLOT 6] cost=1.0755 best=1.0385 t=1497s
+[ORA_SA_CONTINUE] si=7 7 non-improving, 1755s budget
+[SLOT_CONV] step=218 stall=133s thr=133s best=1.0697
+[ORA_SA_SLOT 7] cost=1.0740 best=1.0385 t=1726s
+[ORA_SA_CONTINUE] si=8 8 non-improving, 1526s budget
+[SLOT_CONV] step=126 stall=134s thr=133s best=1.0859
+[ORA_SA_SLOT 8] cost=1.0953 best=1.0385 t=1868s
+[ORA_SA_CONTINUE] si=9 9 non-improving, 1384s budget
+[ORA_SA_SLOT 9] cost=1.4820 best=1.0385 t=2152s
+[ORA_SA_CONTINUE] si=10 10 non-improving, 1100s budget
+[ORA_SA_SLOT 10] cost=1.5772 best=1.0385 t=2421s
+[ORA_SA_CONTINUE] si=11 11 non-improving, 831s budget
+[SLOT_CONV] step=75 stall=133s thr=133s best=1.0652
+[ORA_SA_SLOT 11] cost=1.1390 best=1.0385 t=2561s
+[ORA_SA_CONTINUE] si=12 12 non-improving, 691s budget
+[SLOT_CONV] step=93 stall=134s thr=133s best=1.0699
+[ORA_SA_SLOT 12] cost=1.0908 best=1.0385 t=2702s
+[ORA_SA_CONTINUE] si=13 13 non-improving, 550s budget
+[SLOT_CONV] step=104 stall=133s thr=133s best=1.0821
+[ORA_SA_SLOT 13] cost=1.0863 best=1.0385 t=2848s
+[ORA_SA_EXIT] 14 consecutive non-improving slots, exiting early at si=14
+[SOFT_REOPT] den_only oracle: 0.9616  (prev: 1.0385)
+proxy=0.9661  (wl=0.067 den=0.597 cong=1.202)  VALID  [2973.83s]

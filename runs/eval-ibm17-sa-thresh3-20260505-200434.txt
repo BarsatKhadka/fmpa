@@ -1,0 +1,43 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm17... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm17\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm17/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=24.7s n_topo=12 N_PAR=16 max_topo=192 b2b_seeds=4
+Traceback (most recent call last):
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\Scripts\evaluate.exe\__main__.py", line 10, in <module>
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 272, in place
+    _grad_res = self._gradient_phase_batched(
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 1790, in _gradient_phase_batched
+    total_loss = (wl_loss + lam_den * den_loss + lam_cong_vec * cong_loss).sum()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\lib\site-packages\torch\_tensor.py", line 631, in backward
+    torch.autograd.backward(
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\lib\site-packages\torch\autograd\__init__.py", line 381, in backward
+    _engine_run_backward(
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\lib\site-packages\torch\autograd\graph.py", line 869, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

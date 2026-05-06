@@ -1,0 +1,426 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm01... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm01\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=14.0s n_topo=21 N_PAR=16 max_topo=336 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=1.9358 (wl=0.072 den=1.000 cong=2.727 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=861.9486 (wl=0.072 den=1.043 cong=2.696 ov=4.3000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=1.9274 (wl=0.072 den=1.000 cong=2.710 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=943.7741 (wl=0.072 den=1.048 cong=2.692 ov=4.7092)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=1143.9991 (wl=0.072 den=1.060 cong=2.687 ov=5.7103)
+[PHASE0_DONE] t=315.4s best=1.9142 top5=[('b2b-1-ports_only-center', np.float64(1.9142)), ('b2b-2-ports_soft-random', np.float64(1.9274)), ('init.plc', np.float64(1.9284)), ('b2b-0-ports_soft-center', np.float64(1.9358)), ('b2b-3-ports_soft-corners', np.float64(851.2841))]
+[PH1_SKIP] t=315.4s best_cheap=1.9142
+[DIAG] pre-SA oracle: proxy=1.0385  den=0.812  cong=1.137
+[PH2_ENTER] oracle_calls_possible=839 oracle_call_secs=3.5
+[SEED_ORACLE_SPREAD] n=6 best=1.0385 worst=1.2227 spread=0.1842 all=[1.0385, 1.0385, 1.1375, 1.1808, 1.2081, 1.2227]
+[SLOT_CONV] step=35 stall=134s thr=131s best=1.0385
+[ORA_SA_SLOT 0] cost=1.0385 best=1.0385 t=482s
+[SLOT_CONV] step=37 stall=133s thr=131s best=1.0385
+[ORA_SA_SLOT 1] cost=1.0385 best=1.0385 t=623s
+[SLOT_CONV] step=72 stall=132s thr=131s best=1.1375
+[ORA_SA_SLOT 2] cost=1.1375 best=1.0385 t=851s
+[SLOT_CONV] step=70 stall=133s thr=131s best=1.1762
+[ORA_SA_SLOT 3] cost=1.1762 best=1.0385 t=1078s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=4
+[SOFT_REOPT] den_only oracle: 0.9598  (prev: 1.0385)  ov_pre=0.0000 ov_post=0.0000
+proxy=0.9651  (wl=0.067 den=0.598 cong=1.199)  VALID  [1205.77s]
+  ibm02... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm02\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 30, Row: 27
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm02/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 30, Row: 27
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=14.7s n_topo=20 N_PAR=16 max_topo=320 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3.1797 (wl=0.083 den=1.000 cong=5.194 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=7251.5376 (wl=0.090 den=1.258 cong=5.716 ov=36.2398)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=3.1465 (wl=0.082 den=1.000 cong=5.130 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=4218.9352 (wl=0.083 den=1.144 cong=5.089 ov=21.0787)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=6231.9569 (wl=0.081 den=1.225 cong=5.025 ov=31.1438)
+[PHASE0_DONE] t=324.8s best=2.8698 top5=[('init.plc', np.float64(2.8698)), ('b2b-2-ports_soft-random', np.float64(3.1465)), ('b2b-0-ports_soft-center', np.float64(3.1797)), ('rand', np.float64(1945.9302)), ('rand', np.float64(2086.4911))]
+[PH1_SKIP] t=324.8s best_cheap=2.8698
+[DIAG] pre-SA oracle: proxy=1.5658  den=0.729  cong=2.253
+[PH2_ENTER] oracle_calls_possible=164 oracle_call_secs=17.5
+[SEED_ORACLE_SPREAD] n=6 best=1.5658 worst=1.8739 spread=0.3081 all=[1.5658, 1.5658, 1.7863, 1.8037, 1.8722, 1.8739]
+[SLOT_CONV] step=7 stall=131s thr=124s best=1.5658
+[ORA_SA_SLOT 0] cost=1.5658 best=1.5658 t=613s
+[ORA_SA_SLOT 1] cost=1.5823 best=1.5658 t=880s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[SOFT_REOPT] den_only oracle: 1.5135  (prev: 1.5658)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.5203  (wl=0.074 den=0.616 cong=2.276)  VALID  [1034.53s]
+  ibm03... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm03\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 32, Row: 29
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm03/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 32, Row: 29
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=15.2s n_topo=19 N_PAR=16 max_topo=304 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3337.3237 (wl=0.092 den=1.076 cong=4.364 ov=16.6726)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3.0983 (wl=0.095 den=1.000 cong=5.006 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2.7719 (wl=0.095 den=1.000 cong=4.355 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=4420.1433 (wl=0.092 den=1.144 cong=4.483 ov=22.0862)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=3941.6465 (wl=0.093 den=1.113 cong=4.582 ov=19.6935)
+[PHASE0_DONE] t=316.6s best=2.1034 top5=[('init.plc', np.float64(2.1034)), ('b2b-4-ports_soft-random', np.float64(2.7657)), ('b2b-2-ports_soft-random', np.float64(2.7719)), ('b2b-1-ports_only-center', np.float64(3.0983)), ('b2b-0-ports_soft-center', np.float64(3575.3745))]
+[PH1_SKIP] t=316.6s best_cheap=2.1034
+[DIAG] pre-SA oracle: proxy=1.3255  den=0.732  cong=1.760
+[PH2_ENTER] oracle_calls_possible=893 oracle_call_secs=3.3
+[SEED_ORACLE_SPREAD] n=6 best=1.3255 worst=1.7933 spread=0.4678 all=[1.3255, 1.3255, 1.7395, 1.7741, 1.7826, 1.7933]
+[SLOT_CONV] step=40 stall=132s thr=131s best=1.3241
+[ORA_SA_SLOT 0] cost=1.3241 best=1.3255 t=483s
+[SLOT_CONV] step=39 stall=131s thr=131s best=1.3247
+[ORA_SA_SLOT 1] cost=1.3247 best=1.3241 t=621s
+[ORA_SA_SLOT 2] cost=1.6918 best=1.3241 t=890s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=3
+[SOFT_REOPT] den_only oracle: 1.1857  (prev: 1.3241)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.1860  (wl=0.078 den=0.576 cong=1.641)  VALID  [1018.94s]
+  ibm04... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm04\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 30
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm04/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 30
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=15.4s n_topo=19 N_PAR=16 max_topo=304 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3533.1024 (wl=0.085 den=1.091 cong=4.525 ov=17.6510)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2244.7216 (wl=0.090 den=1.035 cong=4.851 ov=11.2084)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2845.6387 (wl=0.085 den=1.067 cong=4.399 ov=14.2141)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.7092 (wl=0.086 den=1.000 cong=4.246 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2523.5350 (wl=0.085 den=1.047 cong=4.585 ov=12.6032)
+[PHASE0_DONE] t=299.8s best=2.1662 top5=[('init.plc', np.float64(2.1662)), ('b2b-3-ports_soft-corners', np.float64(2.7092)), ('b2b-1-ports_only-center', np.float64(2.9761)), ('b2b-4-ports_soft-random', np.float64(2172.8755)), ('b2b-2-ports_soft-random', np.float64(2844.3354))]
+[PH1_SKIP] t=299.9s best_cheap=2.1662
+[DIAG] pre-SA oracle: proxy=1.3133  den=0.782  cong=1.704
+[PH2_ENTER] oracle_calls_possible=633 oracle_call_secs=4.6
+[SEED_ORACLE_SPREAD] n=6 best=1.3133 worst=1.7716 spread=0.4583 all=[1.3133, 1.3133, 1.6359, 1.6659, 1.6963, 1.7716]
+[SLOT_CONV] step=31 stall=134s thr=131s best=1.3130
+[ORA_SA_SLOT 0] cost=1.3130 best=1.3133 t=485s
+[SLOT_CONV] step=54 stall=134s thr=131s best=1.3130
+[ORA_SA_SLOT 1] cost=1.3169 best=1.3130 t=737s
+[SLOT_CONV] step=57 stall=135s thr=131s best=1.6101
+[ORA_SA_SLOT 2] cost=1.6188 best=1.3130 t=987s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=3
+[SOFT_REOPT] den_only oracle: 1.1976  (prev: 1.3130)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.2013  (wl=0.070 den=0.600 cong=1.664)  VALID  [1114.74s]
+  ibm06... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm06\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm06/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=11.9s n_topo=25 N_PAR=16 max_topo=400 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=1856.9081 (wl=0.079 den=1.040 cong=5.615 ov=9.2675)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3.0888 (wl=0.081 den=1.000 cong=5.015 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=1548.5425 (wl=0.079 den=1.036 cong=5.594 ov=7.7257)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2186.5648 (wl=0.080 den=1.073 cong=5.580 ov=10.9158)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=3.3267 (wl=0.079 den=1.000 cong=5.495 ov=0.0000)
+[PHASE0_DONE] t=289.5s best=2.6527 top5=[('init.plc', np.float64(2.6527)), ('b2b-1-ports_only-center', np.float64(3.0888)), ('rand', np.float64(3.2318)), ('rand', np.float64(3.3004)), ('b2b-4-ports_soft-random', np.float64(3.3267))]
+[PH1_SKIP] t=289.7s best_cheap=2.6527
+[DIAG] pre-SA oracle: proxy=1.6570  den=0.721  cong=2.466
+[PH2_ENTER] oracle_calls_possible=469 oracle_call_secs=6.3
+[SEED_ORACLE_SPREAD] n=6 best=1.6570 worst=2.1504 spread=0.4934 all=[1.657, 1.6577, 1.9356, 2.0378, 2.063, 2.1504]
+[SLOT_CONV] step=22 stall=134s thr=131s best=1.6570
+[ORA_SA_SLOT 0] cost=1.6570 best=1.6570 t=474s
+[SLOT_CONV] step=37 stall=135s thr=131s best=1.6575
+[ORA_SA_SLOT 1] cost=1.6575 best=1.6570 t=718s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[SOFT_REOPT] den_only oracle: 1.5365  (prev: 1.6570)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.5372  (wl=0.063 den=0.585 cong=2.364)  VALID  [918.80s]
+  ibm07... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm07\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 35, Row: 32
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm07/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 35, Row: 32
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=15.3s n_topo=19 N_PAR=16 max_topo=304 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=2.4924 (wl=0.076 den=1.000 cong=3.833 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3.0662 (wl=0.084 den=1.000 cong=4.965 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2.4768 (wl=0.077 den=1.000 cong=3.800 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.5609 (wl=0.077 den=1.000 cong=3.968 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2.4144 (wl=0.076 den=1.000 cong=3.677 ov=0.0000)
+[PHASE0_DONE] t=289.8s best=2.1990 top5=[('init.plc', np.float64(2.199)), ('b2b-4-ports_soft-random', np.float64(2.4144)), ('b2b-2-ports_soft-random', np.float64(2.4768)), ('b2b-0-ports_soft-center', np.float64(2.4924)), ('b2b-3-ports_soft-corners', np.float64(2.5609))]
+[PH1_SKIP] t=289.8s best_cheap=2.1990
+[DIAG] pre-SA oracle: proxy=1.4760  den=0.821  cong=2.001
+[PH2_ENTER] oracle_calls_possible=106 oracle_call_secs=27.1
+[SEED_ORACLE_SPREAD] n=6 best=1.4760 worst=1.7602 spread=0.2841 all=[1.476, 1.476, 1.6932, 1.735, 1.7566, 1.7602]
+[SLOT_CONV] step=5 stall=127s thr=122s best=1.4760
+[ORA_SA_SLOT 0] cost=1.4760 best=1.4760 t=641s
+[SLOT_CONV] step=5 stall=126s thr=122s best=1.4760
+[ORA_SA_SLOT 1] cost=1.4760 best=1.4760 t=781s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[JOINT_REOPT] den_only oracle: 1.3604  (prev: 1.4760)  ov_pre=0.0575 ov_post=0.0000
+proxy=1.3613  (wl=0.063 den=0.648 cong=1.949)  VALID  [931.09s]
+  ibm08... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm08\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 38, Row: 34
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm08/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 38, Row: 34
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=15.5s n_topo=19 N_PAR=16 max_topo=304 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3.2608 (wl=0.086 den=1.000 cong=5.349 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=13356.3799 (wl=0.103 den=1.322 cong=6.908 ov=66.7608)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2194.1011 (wl=0.085 den=1.037 cong=4.812 ov=10.9555)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2686.9441 (wl=0.087 den=1.049 cong=4.894 ov=13.4194)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=1560.9547 (wl=0.087 den=1.012 cong=5.337 ov=7.7885)
+[PHASE0_DONE] t=520.5s best=2.4058 top5=[('init.plc', np.float64(2.4058)), ('b2b-2-ports_soft-random', np.float64(2.9831)), ('b2b-3-ports_soft-corners', np.float64(3.0359)), ('b2b-4-ports_soft-random', np.float64(3.2368)), ('b2b-0-ports_soft-center', np.float64(3.2608))]
+[PH1_SKIP] t=520.6s best_cheap=2.4058
+[DIAG] pre-SA oracle: proxy=1.4664  den=0.816  cong=1.980
+[PH2_ENTER] oracle_calls_possible=370 oracle_call_secs=7.3
+[SEED_ORACLE_SPREAD] n=6 best=1.4664 worst=1.8878 spread=0.4214 all=[1.4664, 1.4664, 1.8225, 1.8719, 1.8782, 1.8878]
+[SLOT_CONV] step=20 stall=126s thr=121s best=1.4664
+[ORA_SA_SLOT 0] cost=1.4664 best=1.4664 t=698s
+[SLOT_CONV] step=20 stall=122s thr=121s best=1.4664
+[ORA_SA_SLOT 1] cost=1.4664 best=1.4664 t=826s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[SOFT_REOPT] den_only oracle: 1.3590  (prev: 1.4664)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.3610  (wl=0.068 den=0.636 cong=1.951)  VALID  [967.47s]
+  ibm09... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm09\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 36, Row: 38
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm09/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 36, Row: 38
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=14.2s n_topo=21 N_PAR=16 max_topo=336 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=1.9941 (wl=0.071 den=1.000 cong=2.847 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2.0103 (wl=0.072 den=1.000 cong=2.877 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=1.9276 (wl=0.071 den=1.000 cong=2.714 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=1.9276 (wl=0.071 den=1.000 cong=2.713 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=1.9510 (wl=0.071 den=1.000 cong=2.761 ov=0.0000)
+[PHASE0_DONE] t=296.6s best=1.9276 top5=[('b2b-2-ports_soft-random', np.float64(1.9276)), ('b2b-3-ports_soft-corners', np.float64(1.9276)), ('b2b-4-ports_soft-random', np.float64(1.951)), ('b2b-0-ports_soft-center', np.float64(1.9941)), ('b2b-1-ports_only-center', np.float64(2.0103))]
+[PH1_SKIP] t=296.6s best_cheap=1.9276
+[DIAG] pre-SA oracle: proxy=1.1126  den=0.836  cong=1.275
+[PH2_ENTER] oracle_calls_possible=615 oracle_call_secs=4.8
+[SEED_ORACLE_SPREAD] n=6 best=1.1126 worst=1.3368 spread=0.2243 all=[1.1126, 1.2916, 1.3122, 1.3127, 1.3363, 1.3368]
+[SLOT_CONV] step=61 stall=134s thr=132s best=1.1113
+[ORA_SA_SLOT 0] cost=1.1113 best=1.1126 t=564s
+[SLOT_CONV] step=64 stall=133s thr=132s best=1.2533
+[ORA_SA_SLOT 1] cost=1.2845 best=1.1113 t=800s
+[ORA_SA_SLOT 2] cost=1.2945 best=1.1113 t=1071s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=3
+[SOFT_REOPT] den_only oracle: 1.0396  (prev: 1.1113)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.0376  (wl=0.054 den=0.691 cong=1.276)  VALID  [1204.37s]
+  ibm10... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm10\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 55, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm10/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 55, Row: 41
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=25.1s n_topo=11 N_PAR=16 max_topo=176 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=14303.2023 (wl=0.064 den=1.077 cong=4.823 ov=71.5009)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=19294.7108 (wl=0.064 den=1.123 cong=4.708 ov=96.4587)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=27730.7507 (wl=0.064 den=1.197 cong=4.727 ov=138.6386)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=17884.2760 (wl=0.064 den=1.119 cong=4.386 ov=89.4073)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=15702.4977 (wl=0.064 den=1.090 cong=4.539 ov=78.4981)
+[PHASE0_DONE] t=301.5s best=2.3110 top5=[('init.plc', np.float64(2.311)), ('b2b-3-ports_soft-corners', np.float64(2.7383)), ('b2b-4-ports_soft-random', np.float64(10632.1844)), ('b2b-1-ports_only-center', np.float64(14596.7396)), ('b2b-0-ports_soft-center', np.float64(16198.9957))]
+[PH1_SKIP] t=301.5s best_cheap=2.3110
+[DIAG] pre-SA oracle: proxy=1.3368  den=0.671  cong=1.868
+[PH2_ENTER] oracle_calls_possible=133 oracle_call_secs=21.6
+[SEED_ORACLE_SPREAD] n=6 best=1.3368 worst=1.6749 spread=0.3381 all=[1.3368, 1.3368, 1.5459, 1.5733, 1.6483, 1.6749]
+[SLOT_CONV] step=7 stall=136s thr=124s best=1.3368
+[ORA_SA_SLOT 0] cost=1.3368 best=1.3368 t=618s
+[SLOT_CONV] step=7 stall=133s thr=124s best=1.3368
+[ORA_SA_SLOT 1] cost=1.3368 best=1.3368 t=771s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[JOINT_REOPT] den_only oracle: 1.3241  (prev: 1.3368)  ov_pre=0.0008 ov_post=0.0000
+proxy=1.3242  (wl=0.063 den=0.673 cong=1.848)  VALID  [959.61s]
+  ibm11... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm11\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 39, Row: 45
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm11/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 39, Row: 45
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=17.3s n_topo=17 N_PAR=16 max_topo=272 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=2490.7722 (wl=0.069 den=1.021 cong=3.154 ov=12.4431)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2384.0853 (wl=0.069 den=1.028 cong=3.357 ov=11.9091)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2.1733 (wl=0.069 den=1.000 cong=3.208 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.0427 (wl=0.068 den=1.000 cong=2.949 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2025.8559 (wl=0.069 den=1.019 cong=3.014 ov=10.1189)
+[PHASE0_DONE] t=287.0s best=1.8456 top5=[('init.plc', np.float64(1.8456)), ('b2b-3-ports_soft-corners', np.float64(2.0427)), ('b2b-2-ports_soft-random', np.float64(2.1733)), ('rand', np.float64(2.4059)), ('rand', np.float64(2.4476))]
+[PH1_SKIP] t=287.0s best_cheap=1.8456
+[DIAG] pre-SA oracle: proxy=1.2141  den=0.862  cong=1.458
+[PH2_ENTER] oracle_calls_possible=379 oracle_call_secs=7.8
+[SEED_ORACLE_SPREAD] n=6 best=1.2141 worst=1.5619 spread=0.3478 all=[1.2141, 1.2141, 1.4435, 1.47, 1.5412, 1.5619]
+[SLOT_CONV] step=29 stall=133s thr=131s best=1.2139
+[ORA_SA_SLOT 0] cost=1.2134 best=1.2141 t=519s
+[ORA_SA_SLOT 1] cost=1.2126 best=1.2134 t=789s
+[SLOT_CONV] step=44 stall=132s thr=131s best=1.3546
+[ORA_SA_SLOT 2] cost=1.3584 best=1.2126 t=1048s
+[ORA_SA_SLOT 3] cost=1.4671 best=1.2126 t=1320s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=4
+[SOFT_REOPT] den_only oracle: 1.1427  (prev: 1.2126)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.1445  (wl=0.052 den=0.750 cong=1.435)  VALID  [1460.92s]
+  ibm12... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm12\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 47, Row: 47
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm12/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 47, Row: 47
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=22.8s n_topo=13 N_PAR=16 max_topo=208 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=7076.7662 (wl=0.074 den=1.027 cong=5.083 ov=35.3682)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=6025.8569 (wl=0.074 den=1.024 cong=5.280 ov=30.1132)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=9264.9207 (wl=0.073 den=1.058 cong=4.707 ov=46.3098)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=8202.0670 (wl=0.073 den=1.047 cong=5.079 ov=40.9947)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=12329.5042 (wl=0.074 den=1.087 cong=4.962 ov=61.6320)
+[PHASE0_DONE] t=321.7s best=2.6710 top5=[('init.plc', np.float64(2.671)), ('b2b-1-ports_only-center', np.float64(5056.9299)), ('b2b-0-ports_soft-center', np.float64(5261.2224)), ('b2b-2-ports_soft-random', np.float64(8670.2077)), ('b2b-3-ports_soft-corners', np.float64(10137.9442))]
+[PH1_SKIP] t=321.7s best_cheap=2.6710
+[DIAG] pre-SA oracle: proxy=1.6251  den=0.767  cong=2.365
+[PH2_ENTER] oracle_calls_possible=125 oracle_call_secs=22.8
+[SEED_ORACLE_SPREAD] n=6 best=1.6251 worst=1.9013 spread=0.2762 all=[1.6251, 1.6251, 1.8012, 1.8921, 1.8988, 1.9013]
+[SLOT_CONV] step=5 stall=124s thr=123s best=1.6245
+[ORA_SA_SLOT 0] cost=1.6246 best=1.6251 t=720s
+[SLOT_CONV] step=6 stall=145s thr=123s best=1.6243
+[ORA_SA_SLOT 1] cost=1.6243 best=1.6246 t=1031s
+[SLOT_CONV] step=3 stall=223s thr=123s best=1.8000
+[ORA_SA_SLOT 2] cost=1.8001 best=1.6243 t=1541s
+[ORA_SA_SLOT 3] cost=1.8684 best=1.6243 t=1954s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=4
+[JOINT_REOPT] den_only oracle: 1.5640  (prev: 1.6243)  ov_pre=0.1057 ov_post=0.0000
+proxy=1.5630  (wl=0.057 den=0.740 cong=2.272)  VALID  [2378.25s]
+  ibm13... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm13\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 43, Row: 43
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm13/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 43, Row: 43
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=18.4s n_topo=16 N_PAR=16 max_topo=256 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=2.3179 (wl=0.065 den=1.000 cong=3.505 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2.8944 (wl=0.073 den=1.000 cong=4.643 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2.2651 (wl=0.066 den=1.000 cong=3.398 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.2993 (wl=0.066 den=1.000 cong=3.467 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2.3228 (wl=0.065 den=1.000 cong=3.515 ov=0.0000)
+[PHASE0_DONE] t=288.9s best=2.2651 top5=[('b2b-2-ports_soft-random', np.float64(2.2651)), ('b2b-3-ports_soft-corners', np.float64(2.2993)), ('b2b-0-ports_soft-center', np.float64(2.3179)), ('b2b-4-ports_soft-random', np.float64(2.3228)), ('b2b-1-ports_only-center', np.float64(2.8944))]
+[PH1_SKIP] t=288.9s best_cheap=2.2651
+[DIAG] pre-SA oracle: proxy=1.3854  den=0.891  cong=1.773
+[PH2_ENTER] oracle_calls_possible=48 oracle_call_secs=57.6
+[SEED_ORACLE_SPREAD] n=6 best=1.3854 worst=1.8385 spread=0.4531 all=[1.3854, 1.6031, 1.6141, 1.6365, 1.6525, 1.8385]
+[SLOT_CONV] step=3 stall=122s thr=116s best=1.3854
+[ORA_SA_SLOT 0] cost=1.3854 best=1.3854 t=711s
+[SLOT_CONV] step=5 stall=138s thr=116s best=1.6031
+[ORA_SA_SLOT 1] cost=1.6031 best=1.3854 t=874s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[JOINT_REOPT] cong_w=2 oracle: 1.2370  (prev: 1.3854)  ov_pre=0.0291 ov_post=0.0000
+proxy=1.2411  (wl=0.054 den=0.645 cong=1.730)  VALID  [1095.85s]
+  ibm14... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm14\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 49, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm14/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 49, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=22.2s n_topo=13 N_PAR=16 max_topo=208 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=1704.7504 (wl=0.064 den=0.903 cong=3.793 ov=8.5117)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2512.6551 (wl=0.084 den=0.936 cong=6.207 ov=12.5450)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2.4158 (wl=0.064 den=0.866 cong=3.838 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.4225 (wl=0.064 den=0.851 cong=3.866 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=1756.4109 (wl=0.064 den=0.888 cong=3.909 ov=8.7697)
+[PHASE0_DONE] t=292.6s best=2.2468 top5=[('init.plc', np.float64(2.2468)), ('b2b-2-ports_soft-random', np.float64(2.4158)), ('b2b-3-ports_soft-corners', np.float64(2.4225)), ('rand', np.float64(3.5893)), ('rand', np.float64(3.6055))]
+[PH1_SKIP] t=292.6s best_cheap=2.2468
+[DIAG] pre-SA oracle: proxy=1.5938  den=0.964  cong=2.120
+[PH2_ENTER] oracle_calls_possible=18 oracle_call_secs=137.8
+[SEED_ORACLE_SPREAD] n=6 best=1.5938 worst=2.2228 spread=0.6290 all=[1.5938, 1.5938, 1.7322, 1.7359, 2.1201, 2.2228]
+[ORA_SA_SLOT 0] cost=1.5932 best=1.5938 t=1152s
+[ORA_SA_SLOT 1] cost=1.5920 best=1.5932 t=1398s
+[SLOT_CONV] step=3 stall=135s thr=93s best=1.7322
+[ORA_SA_SLOT 2] cost=1.7322 best=1.5920 t=1586s
+[SLOT_CONV] step=4 stall=108s thr=93s best=1.7359
+[ORA_SA_SLOT 3] cost=1.7359 best=1.5920 t=1832s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=4
+[JOINT_REOPT] cong_w=2 oracle: 1.4823  (prev: 1.5920)  ov_pre=0.0901 ov_post=0.0000
+proxy=1.4895  (wl=0.053 den=0.681 cong=2.191)  VALID  [2078.15s]
+  ibm15... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm15\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 57, Row: 38
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm15/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 57, Row: 38
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=17.7s n_topo=16 N_PAR=16 max_topo=256 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=2.6402 (wl=0.076 den=1.000 cong=4.129 ov=0.0000)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2.4566 (wl=0.077 den=1.000 cong=3.759 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2.5847 (wl=0.076 den=1.000 cong=4.017 ov=0.0000)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.6298 (wl=0.077 den=1.000 cong=4.106 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2.5093 (wl=0.076 den=1.000 cong=3.866 ov=0.0000)

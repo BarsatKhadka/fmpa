@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\Scripts\evaluate.exe\__main__.py", line 4, in <module>
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\__init__.py", line 14, in <module>
+    from macro_place.benchmark import Benchmark
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\benchmark.py", line 9, in <module>
+    import torch
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\lib\site-packages\torch\__init__.py", line 285, in <module>
+    _load_dll_libraries()
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\lib\site-packages\torch\__init__.py", line 268, in _load_dll_libraries
+    raise err
+OSError: [WinError 1455] The paging file is too small for this operation to complete. Error loading "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\lib\site-packages\torch\lib\cufft64_11.dll" or one of its dependencies.

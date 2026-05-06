@@ -1,0 +1,35 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm06... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm06\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm06/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=11.9s n_topo=25 N_PAR=16 max_topo=400 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=1213.5152 (wl=0.079 den=1.013 cong=5.498 ov=6.0509)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3.2055 (wl=0.086 den=1.000 cong=5.240 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2831.5209 (wl=0.079 den=1.078 cong=5.582 ov=14.1406)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=1655.2469 (wl=0.079 den=1.050 cong=5.436 ov=8.2596)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2715.5402 (wl=0.078 den=1.088 cong=5.690 ov=13.5604)
+[PHASE0_DONE] t=292.5s best=2.6662 top5=[('init.plc', np.float64(2.6662)), ('b2b-1-ports_only-center', np.float64(3.2055)), ('rand', np.float64(3.2974)), ('rand', np.float64(3.3402)), ('rand', np.float64(3.3682))]
+[PH1_SKIP] t=292.5s best_cheap=2.6662
+[DIAG] pre-SA oracle: proxy=1.6602  den=0.727  cong=2.467
+[PH2_ENTER] oracle_calls_possible=444 oracle_call_secs=6.6
+[SEED_ORACLE_SPREAD] n=6 best=1.6602 worst=2.1047 spread=0.4446 all=[1.6602, 1.6867, 2.0063, 2.0514, 2.0643, 2.1047]
+[SLOT_CONV] step=22 stall=135s thr=131s best=1.6602
+[ORA_SA_SLOT 0] cost=1.6602 best=1.6602 t=478s
+[SLOT_CONV] step=36 stall=134s thr=131s best=1.6768
+[ORA_SA_SLOT 1] cost=1.6768 best=1.6602 t=717s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[CONG_TRIGGER] den=0.727 cong=2.467 -> cong_w=1.0
+[SOFT_REOPT] cong_w=1 oracle: 1.5778  (prev: 1.6602)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.5805  (wl=0.065 den=0.587 cong=2.443)  VALID  [917.68s]

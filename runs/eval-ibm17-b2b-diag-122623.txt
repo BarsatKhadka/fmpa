@@ -1,0 +1,30 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm17... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm17\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm17/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 51, Row: 44
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[B2B_DIAG] budget=25.0s n_movable=760
+[B2B_DIAG] b2b-0-ports_soft-center: raw=128452.1844 resolved=24600.5048 t=3.1s
+[B2B_DIAG] b2b-1-ports_only-center: raw=648991.1709 resolved=185259.1827 t=0.9s
+[B2B_DIAG] b2b-2-ports_soft-random: raw=133244.1053 resolved=24063.0353 t=3.0s
+[B2B_DIAG] b2b-3-ports_soft-corners: raw=134773.7444 resolved=25861.4015 t=3.2s
+[B2B_DIAG] b2b-4-ports_soft-random: raw=131254.9219 resolved=22811.3597 t=3.0s
+[GRAD_DIAG] per_start_s=24.7s n_topo=12 N_PAR=16 max_topo=192 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3676.0108 (wl=0.066 den=0.896 cong=3.646 ov=18.3684)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3808.4409 (wl=0.073 den=0.918 cong=5.574 ov=19.0256)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2597.4038 (wl=0.067 den=0.873 cong=3.560 ov=12.9756)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2.2676 (wl=0.067 den=0.838 cong=3.563 ov=0.0000)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=2852.2454 (wl=0.066 den=0.888 cong=3.604 ov=14.2497)
+[PHASE0_DONE] t=295.4s best=2.2201 top5=[('init.plc', np.float64(2.2201)), ('b2b-3-ports_soft-corners', np.float64(2.2676)), ('rand', np.float64(2.7353)), ('rand', np.float64(2.7683)), ('rand', np.float64(2.7837))]
+[PH1_SKIP] t=295.4s best_cheap=2.2201

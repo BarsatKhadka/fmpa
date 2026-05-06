@@ -1,0 +1,34 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm06... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm06\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm06/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=11.9s n_topo=25 N_PAR=16 max_topo=400 b2b_seeds=4
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=2220.2454 (wl=0.078 den=1.070 cong=5.602 ov=11.0842)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=3.3246 (wl=0.092 den=1.000 cong=5.465 ov=0.0000)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2107.5694 (wl=0.078 den=1.071 cong=5.702 ov=10.5205)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=2012.9014 (wl=0.079 den=1.062 cong=5.452 ov=10.0478)
+[PHASE0_DONE] t=296.7s best=3.3246 top5=[('b2b-1-ports_only-center', np.float64(3.3246)), ('rand', np.float64(3.3306)), ('rand', np.float64(3.3633)), ('rand', np.float64(3.3643)), ('rand', np.float64(3.4383))]
+[PH1_SKIP] t=296.7s best_cheap=3.3246
+[DIAG] pre-SA oracle: proxy=1.6580  den=0.723  cong=2.466
+[PH2_ENTER] oracle_calls_possible=230 oracle_call_secs=12.7
+[SEED_ORACLE_SPREAD] n=6 best=1.6580 worst=2.1209 spread=0.4629 all=[1.658, 2.0653, 2.0997, 2.1159, 2.1202, 2.1209]
+[SLOT_CONV] step=13 stall=131s thr=129s best=1.6579
+[ORA_SA_SLOT 0] cost=1.6579 best=1.6580 t=546s
+[ORA_SA_SLOT 1] cost=2.0423 best=1.6579 t=822s
+[ORA_SA_SLOT 2] cost=2.0157 best=1.6579 t=1103s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=3
+[CONG_TRIGGER] den=0.723 cong=2.466 -> cong_w=0.0
+[SOFT_REOPT] den_only oracle: 1.5341  (prev: 1.6579)  ov_pre=0.0000 ov_post=0.0000
+proxy=1.5355  (wl=0.063 den=0.587 cong=2.358)  VALID  [1257.71s]

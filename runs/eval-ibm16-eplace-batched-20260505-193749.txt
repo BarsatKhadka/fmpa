@@ -1,0 +1,31 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm16... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm16\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 48
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm16/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 45, Row: 48
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=19.1s n_topo=15 N_PAR=16 max_topo=240 b2b_seeds=3
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=13221.6105 (wl=0.062 den=1.064 cong=4.611 ov=66.0936)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=17516.9986 (wl=0.098 den=1.087 cong=6.947 ov=87.5644)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=11957.4034 (wl=0.062 den=1.055 cong=4.354 ov=59.7732)
+[PHASE0_DONE] t=379.6s best=2.2520 top5=[('init.plc', np.float64(2.252)), ('rand', np.float64(2.9519)), ('rand', np.float64(3.283)), ('b2b-0-ports_soft-center', np.float64(9683.5588)), ('b2b-2-ports_soft-random', np.float64(10074.1658))]
+[PH1_SKIP] t=379.7s best_cheap=2.2520
+[DIAG] pre-SA oracle: proxy=1.4911  den=0.822  cong=2.062
+[PH2_ENTER] oracle_calls_possible=15 oracle_call_secs=155.6
+[SEED_ORACLE_SPREAD] n=6 best=1.4911 worst=2.1807 spread=0.6896 all=[1.4911, 1.4911, 1.7281, 1.7977, 2.008, 2.1807]
+[ORA_SA_SLOT 0] cost=1.4911 best=1.4911 t=1939s
+[ORA_SA_SLOT 1] cost=1.4932 best=1.4911 t=2338s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+[CONG_TRIGGER] den=0.822 cong=2.062 -> cong_w=0.0
+[JOINT_REOPT] den_only oracle: 1.6001  (prev: 1.4911)  ov_pre=0.0008 ov_post=0.0000
+proxy=1.4904  (wl=0.049 den=0.823 cong=2.059)  VALID  [2968.91s]

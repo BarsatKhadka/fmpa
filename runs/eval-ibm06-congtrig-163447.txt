@@ -1,0 +1,47 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm06... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm06\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm06/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=11.9s n_topo=25 N_PAR=16 max_topo=400 b2b_seeds=5
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=2940.7162 (wl=0.079 den=1.090 cong=5.769 ov=14.6860)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=1191.8164 (wl=0.088 den=1.037 cong=5.396 ov=5.9426)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=1655.2927 (wl=0.079 den=1.050 cong=5.519 ov=8.2596)
+[GRAD_B2B_POST] b2b-3-ports_soft-corners: proxy=1785.4206 (wl=0.079 den=1.066 cong=5.586 ov=8.9101)
+[GRAD_B2B_POST] b2b-4-ports_soft-random: proxy=3294.6494 (wl=0.078 den=1.102 cong=5.728 ov=16.4558)
+[PHASE0_DONE] t=291.8s best=2.6497 top5=[('init.plc', np.float64(2.6497)), ('rand', np.float64(3.3874)), ('rand', np.float64(3.3977)), ('rand', np.float64(3.4092)), ('rand', np.float64(3.4286))]
+[PH1_SKIP] t=291.8s best_cheap=2.6497
+[DIAG] pre-SA oracle: proxy=1.6617  den=0.730  cong=2.466
+[PH2_ENTER] oracle_calls_possible=245 oracle_call_secs=11.9
+[SEED_ORACLE_SPREAD] n=6 best=1.6617 worst=2.1620 spread=0.5003 all=[1.6617, 1.6626, 2.1403, 2.1544, 2.1582, 2.162]
+[SLOT_CONV] step=7 stall=135s thr=128s best=1.6617
+[ORA_SA_SLOT 0] cost=1.6617 best=1.6617 t=531s
+[SLOT_CONV] step=6 stall=130s thr=128s best=1.6626
+[ORA_SA_SLOT 1] cost=1.6626 best=1.6617 t=684s
+[ORA_SA_EXIT] 2 consecutive non-improving slots, exiting early at si=2
+Traceback (most recent call last):
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\Scripts\evaluate.exe\__main__.py", line 10, in <module>
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 533, in place
+    print(f"[CONG_TRIGGER] den={_den_val:.3f} cong={_cong_val:.3f} \u2192 cong_w={_sr_cong_w:.1f}", flush=True)
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 36: character maps to <undefined>

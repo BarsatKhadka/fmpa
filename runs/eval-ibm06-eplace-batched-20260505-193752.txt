@@ -1,0 +1,37 @@
+================================================================================
+evaluate · Placer  (soln.py)
+================================================================================
+
+  ibm06... #[INFO] Reading from external\MacroPlacement\Testcases\ICCAD04/ibm06\netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+#[INFO] Reading from external/MacroPlacement/Testcases/ICCAD04/ibm06/netlist.pb.txt
+[INFO] Retrieving Meta information from .plc comments
+#[PLACEMENT GRID] Col: 31, Row: 28
+#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96
+#[CONGESTION SMOOTH RANGE] Smooth Range: 2
+#[OVERLAP THRESHOLD] Threshold: 0.0040
+[GRAD_DIAG] per_start_s=11.9s n_topo=25 N_PAR=16 max_topo=400 b2b_seeds=3
+[GRAD_B2B_POST] b2b-0-ports_soft-center: proxy=3164.2378 (wl=0.079 den=1.095 cong=5.519 ov=15.8043)
+[GRAD_B2B_POST] b2b-1-ports_only-center: proxy=2922.0193 (wl=0.094 den=1.108 cong=5.309 ov=14.5936)
+[GRAD_B2B_POST] b2b-2-ports_soft-random: proxy=2584.7235 (wl=0.078 den=1.073 cong=5.694 ov=12.9063)
+Traceback (most recent call last):
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\barsa\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\.venv\Scripts\evaluate.exe\__main__.py", line 10, in <module>
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 313, in main
+    result = evaluate_benchmark(placer, name, str(testcase_root), ng45_dir=ng45_dir)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\macro_place\evaluate.py", line 142, in evaluate_benchmark
+    placement = placer.place(benchmark)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 309, in place
+    _wl, _de, _co, _ov = cheap_components(_pg)
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 104, in cheap_components
+    wl   = self._hpwl_vec(ap, safe_nnp, nnmask) / hpwl_norm
+  File "C:\Users\barsa\Documents\Projects\macro-place-challenge-2026\soln.py", line 2832, in _hpwl_vec
+    mx=np.where(nnmask,all_x,-INF); mn=np.where(nnmask,all_x,INF)
+numpy._core._exceptions.MemoryError: Unable to allocate 1.60 MiB for an array with shape (9964, 21) and data type float64
